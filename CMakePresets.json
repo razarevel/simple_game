@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "configurePresets": [
+{
+      "name": "vcpkg",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER" :"clangc",
+        "CMAKE_CXX_COMPILER" :"clang++",
+        "CMAKE_BUILD_TYPE" :"Debug",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_CXX_FLAGS_DEBUG": "-D_DEBUG",
+				"CMAKE_CXX_FLAGS": "-stdlib=libc++ -g",
+        "CMAKE_EXE_LINKER_FLAGS": "-stdlib=libc++",
+        "CMAKE_SHARED_LINKER_FLAGS": "-stdlib=libc++"
+      }
+    },
+    {
+      "name": "debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER" :"gcc",
+        "CMAKE_CXX_COMPILER" :"g++",
+        "CMAKE_BUILD_TYPE" :"Debug",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_CXX_FLAGS_DEBUG": "-D_DEBUG"
+      }
+    },
+		{
+      "name": "release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER" :"gcc",
+        "CMAKE_CXX_COMPILER" :"g++",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    }
+
+  ]
+}
