@@ -1,4 +1,5 @@
 #include "maiApp.h"
+#include "imgui.h"
 
 const glm::vec3 KInitialCameraPos = glm::vec3(0.0f, 1.0f, -1.5f);
 const glm::vec3 kInitialCameraTarget = glm::vec3(0.0f, 0.5f, 0.0f);
@@ -30,6 +31,8 @@ MaiApp::MaiApp() {
 
   setMouseConfig();
   setKeyboardConfig();
+
+  imgui = new ImGuiRenderer(ren, window, depthTexture->getDeptFormat());
 }
 
 void MaiApp::setMouseConfig() {
@@ -93,14 +96,41 @@ void MaiApp::run(DrawFrameFunc drawFrame, DrawFrameFunc beforeDraw,
     deltaSecond = static_cast<float>(newTimeStamp - timeStamp);
     timeStamp = newTimeStamp;
 
-    positioner.update(deltaSecond, mouseState.pos, mouseState.presedLeft);
+    positioner.update(deltaSecond, mouseState.pos,
+                      ImGui::GetIO().WantCaptureMouse ? false
+                                                      : mouseState.presedLeft);
     fps.tick(deltaSecond);
     currentFPS = fps.currentFPS_;
 
     MAI::CommandBuffer *buff = ren->acquireCommandBuffer();
     beforeDraw(buff, width, height, ratio, deltaSecond);
-    buff->cmdBeginRendering({});
+    // draw
+    buff->cmdBeginRendering({.texture = depthTexture});
+    imgui->beginFrame({(uint32_t)width, (uint32_t)height});
     drawFrame(buff, width, height, ratio, deltaSecond);
+    // fps
+    {
+      if (const ImGuiViewport *v = ImGui::GetMainViewport()) {
+        ImGui::SetNextWindowPos(
+            {v->WorkPos.x + v->WorkSize.x - 15.0f, v->WorkPos.y + 15.0f},
+            ImGuiCond_Always, {1.0f, 0.0f});
+      }
+      ImGui::SetNextWindowBgAlpha(0.30f);
+      ImGui::SetNextWindowSize(
+          ImVec2(ImGui::CalcTextSize("FPS : _______").x, 0));
+      if (ImGui::Begin("##FPS", nullptr,
+                       ImGuiWindowFlags_NoDecoration |
+                           ImGuiWindowFlags_AlwaysAutoResize |
+                           ImGuiWindowFlags_NoSavedSettings |
+                           ImGuiWindowFlags_NoFocusOnAppearing |
+                           ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove)) {
+        ImGui::Text("FPS : %i", (int)currentFPS);
+        ImGui::Text("Ms  : %.1f", 1000.0 / currentFPS);
+        ImGui::End();
+      }
+    }
+    // ending
+    imgui->endFrame(buff);
     buff->cmdEndRendering();
     ren->submit();
     afterDraw(buff, width, height, ratio, deltaSecond);
@@ -110,6 +140,7 @@ void MaiApp::run(DrawFrameFunc drawFrame, DrawFrameFunc beforeDraw,
 }
 
 MaiApp::~MaiApp() {
+  delete imgui;
   delete camera;
   delete depthTexture;
   glfwDestroyWindow(window);

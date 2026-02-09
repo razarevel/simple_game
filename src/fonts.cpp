@@ -3,10 +3,11 @@
 #include <cstdio>
 #include <iostream>
 
-#include "stb_image.h"
+#include "stbi_image.h"
 
-FontRenderer::FontRenderer(MAI::Renderer *ren, uint32_t width, uint32_t height)
-    : ren_(ren), screenWidht(width), screenHeight(height) {
+FontRenderer::FontRenderer(MAI::Renderer *ren, uint32_t width, uint32_t height,
+                           VkFormat format)
+    : ren_(ren), screenWidht(width), screenHeight(height), format(format) {
   loadFonts();
   loadResources();
 }
@@ -77,8 +78,8 @@ void FontRenderer::loadResources() {
       .usage = MAI::Sampled_Bit,
   });
 
-  vert_ = ren_->createShader(SHADERS_PATH "font.vert");
-  frag_ = ren_->createShader(SHADERS_PATH "font.frag");
+  vert_ = ren_->createShader(SHADERS_PATH "spvs/font.vspv");
+  frag_ = ren_->createShader(SHADERS_PATH "spvs/font.fspv");
   pipeline_ = ren_->createPipeline({
       .vert = vert_,
       .frag = frag_,
@@ -88,13 +89,14 @@ void FontRenderer::loadResources() {
               .srcColorBlend = MAI::Src_Alpha,
               .dstColorBlend = MAI::Minus_Src_Alpha,
           },
+      .depthFormat = format,
   });
   delete vert_;
   delete frag_;
 }
 
 void FontRenderer::populateVertices(const char *text,
-                                    std::vector<Vertex> &vertices,
+                                    std::vector<FontVertex> &vertices,
                                     glm::vec2 pos, glm::vec3 color) {
   std::string str = text;
   float penX = screenWidht * pos.x;
@@ -137,7 +139,7 @@ void FontRenderer::drawDynamicText(MAI::CommandBuffer *buff, const char *text,
                                    const char *id, glm::vec2 pos,
                                    glm::vec3 color) {
   // generate vertices;
-  std::vector<Vertex> vertices2;
+  std::vector<FontVertex> vertices2;
   populateVertices(text, vertices2, pos, color);
   MAI::Buffer *vertBuffer = nullptr;
 
@@ -148,7 +150,7 @@ void FontRenderer::drawDynamicText(MAI::CommandBuffer *buff, const char *text,
     vertBuffer = ren_->createBuffer({
         .usage = MAI::StorageBuffer,
         .storage = MAI::StorageType_Device,
-        .size = sizeof(Vertex) * vertices2.size(),
+        .size = sizeof(FontVertex) * vertices2.size(),
         .data = vertices2.data(),
     });
 
@@ -160,7 +162,7 @@ void FontRenderer::drawDynamicText(MAI::CommandBuffer *buff, const char *text,
       vertBuffer = ren_->createBuffer({
           .usage = MAI::StorageBuffer,
           .storage = MAI::StorageType_Device,
-          .size = sizeof(Vertex) * vertices2.size(),
+          .size = sizeof(FontVertex) * vertices2.size(),
           .data = vertices2.data(),
       });
       it->second.buffer = vertBuffer;
@@ -169,7 +171,7 @@ void FontRenderer::drawDynamicText(MAI::CommandBuffer *buff, const char *text,
       vertBuffer = it->second.buffer;
 
       buff->update(vertBuffer, vertices2.data(),
-                   sizeof(Vertex) * vertices2.size());
+                   sizeof(FontVertex) * vertices2.size());
     }
   }
 
@@ -181,7 +183,7 @@ void FontRenderer::draw(MAI::CommandBuffer *buff) {
     buffer_ = ren_->createBuffer({
         .usage = MAI::StorageBuffer,
         .storage = MAI::StorageType_Device,
-        .size = sizeof(Vertex) * verticesAll.size(),
+        .size = sizeof(FontVertex) * verticesAll.size(),
         .data = verticesAll.data(),
     });
   }

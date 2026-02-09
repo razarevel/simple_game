@@ -6,16 +6,31 @@
 #include <glm/ext.hpp>
 #include <glm/glm.hpp>
 
+struct Cubemap {
+  std::string name;
+  uint32_t id;
+  MAI::Texture *tex;
+};
+
+struct DrawInfo {
+  MAI::CommandBuffer *buff;
+  uint32_t id = 0;
+  float ratio;
+  glm::mat4 proj;
+  glm::mat4 view;
+  glm::mat4 model = glm::mat4(1.0f);
+  glm::vec3 cameraPos;
+};
+
 struct Skybox {
-  Skybox(MAI::Renderer *ren, MAI::Texture *depthTexture);
+  Skybox(MAI::Renderer *ren, VkFormat format = VK_FORMAT_UNDEFINED);
   ~Skybox();
 
-  void draw(MAI::CommandBuffer *buff, float ratio, glm::mat4 proj,
-            glm::mat4 view, glm::vec3 cameraPos = glm::vec3(0.0f, 1.0f, -1.5f));
+  void draw(const DrawInfo &info);
+  const std::vector<Cubemap> &getSkyboxInfo() { return cubemaps; }
 
 private:
   MAI::Renderer *ren_;
-
   MAI::Pipeline *pipeline_ = nullptr;
-  MAI::Texture *cubemapTex = nullptr;
+  std::vector<Cubemap> cubemaps;
 };

@@ -8,7 +8,7 @@
 #include <map>
 #include <unordered_map>
 
-struct Vertex {
+struct FontVertex {
   glm::vec2 pos;
   glm::vec2 uv;
   glm::vec3 color;
@@ -35,7 +35,8 @@ struct DynamicText {
 };
 
 struct FontRenderer {
-  FontRenderer(MAI::Renderer *ren, uint32_t width, uint32_t height);
+  FontRenderer(MAI::Renderer *ren, uint32_t width, uint32_t height,
+               VkFormat formt = VK_FORMAT_UNDEFINED);
   ~FontRenderer();
 
   void setText(const char *text, glm::vec2 pos,
@@ -49,6 +50,7 @@ struct FontRenderer {
 private:
   uint32_t screenWidht;
   uint32_t screenHeight;
+  VkFormat format;
   MAI::Renderer *ren_;
   MAI::Pipeline *pipeline_;
   MAI::Shader *vert_;
@@ -58,7 +60,7 @@ private:
   std::map<const char *, DynamicText> dynamicBuffers;
   std::vector<MAI::Buffer *> garbeBuffers;
 
-  std::vector<Vertex> verticesAll;
+  std::vector<FontVertex> verticesAll;
 
   bool stopInserting = false;
 
@@ -70,6 +72,6 @@ private:
 
   void loadFonts();
   void loadResources();
-  void populateVertices(const char *text, std::vector<Vertex> &vertices,
+  void populateVertices(const char *text, std::vector<FontVertex> &vertices,
                         glm::vec2 pos, glm::vec3 color);
 };

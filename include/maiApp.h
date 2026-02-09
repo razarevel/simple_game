@@ -1,5 +1,6 @@
 #pragma once
 #include "Camera.h"
+#include "imguiRenderer.h"
 #include "mai_config.h"
 #include "mai_vk.h"
 #include <functional>
@@ -35,6 +36,7 @@ struct MaiApp {
   GLFWwindow *window = nullptr;
   MAI::Texture *depthTexture = nullptr;
   Camera *camera = nullptr;
+  ImGuiRenderer *imgui;
   float currentFPS;
 
   void run(DrawFrameFunc drawFrame, DrawFrameFunc beforeDraw,

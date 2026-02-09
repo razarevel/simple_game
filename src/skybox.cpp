@@ -1,45 +1,75 @@
 #include <Bitmap.h>
 #include <UtilsCubemap.h>
+#include <filesystem>
+#include <iostream>
+#include <mutex>
 #include <skybox.h>
+#include <thread>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+namespace fs = std::filesystem;
 
-Skybox::Skybox(MAI::Renderer *ren, MAI::Texture *depthTexture) : ren_(ren) {
-  MAI::Shader *vert_ = ren_->createShader(SHADERS_PATH "skybox.vert");
-  MAI::Shader *frag_ = ren_->createShader(SHADERS_PATH "skybox.frag");
+#include "stbi_image.h"
+
+namespace {
+uint32_t count = 0;
+std::mutex mtx;
+}; // namespace
+
+void loadCubemape(MAI::Renderer *ren, std::string dir,
+                  std::vector<Cubemap> &cubemaps) {
+  int w, h;
+  const float *img = stbi_loadf(dir.c_str(), &w, &h, nullptr, 4);
+  assert(img);
+  Bitmap in(w, h, 4, eBitmapFormat_Float, img);
+  Bitmap out = convertEquirectangularMapToVerticalCross(in);
+  stbi_image_free((void *)img);
+
+  Bitmap cubemap = convertVerticalCrossToCubeMapFaces(out);
+
+  MAI::Texture *cube = ren->createImage({
+      .type = MAI::TextureType_Cube,
+      .format = MAI::Format_RGBA_F32,
+      .dimensions = {(uint32_t)cubemap.w_, (uint32_t)cubemap.h_},
+      .data = cubemap.data_.data(),
+      .usage = MAI::Sampled_Bit,
+  });
+
+  std::string name = dir;
+  name = name.substr(name.find_last_of('/') + 1);
+  std::size_t pos = name.find_last_of('.');
+  name = name.substr(0, pos);
+
+  std::lock_guard<std::mutex> lock(mtx);
+  cubemaps.emplace_back(Cubemap{
+      .name = name,
+      .id = count,
+      .tex = cube,
+  });
+  count++;
+}
+
+Skybox::Skybox(MAI::Renderer *ren, VkFormat format) : ren_(ren) {
+  MAI::Shader *vert_ = ren_->createShader(SHADERS_PATH "spvs/skybox.vspv");
+  MAI::Shader *frag_ = ren_->createShader(SHADERS_PATH "spvs/skybox.fspv");
   pipeline_ = ren_->createPipeline({
       .vert = vert_,
       .frag = frag_,
-      .depthFormat = depthTexture->getDeptFormat(),
+      .depthFormat = format,
   });
   delete vert_;
   delete frag_;
 
-  {
-    int w, h;
-    const float *img =
-        stbi_loadf(RESOURCES_PATH "skybox/qwantani_moonrise_puresky.hdr", &w,
-                   &h, nullptr, 4);
-    assert(img);
-    Bitmap in(w, h, 4, eBitmapFormat_Float, img);
-    Bitmap out = convertEquirectangularMapToVerticalCross(in);
-    stbi_image_free((void *)img);
-
-    Bitmap cubemap = convertVerticalCrossToCubeMapFaces(out);
-
-    cubemapTex = ren->createImage({
-        .type = MAI::TextureType_Cube,
-        .format = MAI::Format_RGBA_F32,
-        .dimensions = {(uint32_t)cubemap.w_, (uint32_t)cubemap.h_},
-        .data = cubemap.data_.data(),
-        .usage = MAI::Sampled_Bit,
-    });
+  std::vector<std::jthread> threads;
+  std::string path = RESOURCES_PATH "skybox";
+  for (const auto &entry : fs::directory_iterator(path)) {
+    std::string str = entry.path();
+    threads.emplace_back(loadCubemape, ren, str, std::ref(cubemaps));
   }
+
+  assert(threads.size() != 0);
 }
 
-void Skybox::draw(MAI::CommandBuffer *buff, float ratio, glm::mat4 proj,
-                  glm::mat4 view, glm::vec3 cameraPos) {
+void Skybox::draw(const DrawInfo &info) {
 
   struct PushConstant {
     glm::mat4 view;
@@ -47,17 +77,19 @@ void Skybox::draw(MAI::CommandBuffer *buff, float ratio, glm::mat4 proj,
     glm::vec4 cameraPos;
     uint32_t textureId;
   } pc{
-      .view = view,
-      .proj = proj,
-      .cameraPos = glm::vec4(cameraPos, 1.0f),
-      .textureId = cubemapTex->getIndex(),
+      .view = info.view,
+      .proj = info.proj,
+      .cameraPos = glm::vec4(info.cameraPos, 1.0f),
+      .textureId = cubemaps[info.id].tex->getIndex(),
   };
-  buff->bindPipeline(pipeline_);
-  buff->cmdPushConstant(&pc);
-  buff->cmdDraw(36);
+  info.buff->bindPipeline(pipeline_);
+  info.buff->cmdPushConstant(&pc);
+  info.buff->cmdDraw(36);
 }
 
 Skybox::~Skybox() {
-  delete cubemapTex;
+  for (auto &it : cubemaps)
+    delete it.tex;
+  cubemaps.clear();
   delete pipeline_;
 }

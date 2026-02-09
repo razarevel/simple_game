@@ -4,8 +4,7 @@
   "dependencies": [
     "glfw3",
     "vulkan-memory-allocator",
-		"glslang",
-		"assimp"
+		"glslang"
   ]
 }
 

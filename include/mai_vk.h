@@ -125,59 +125,69 @@ enum TextureUsage : uint8_t {
 };
 
 enum SamplerFilter : uint8_t {
-  Nearst,
-  Linear,
+  Nearst = 0x01,
+  Linear = 0x02,
 };
 
 enum SamplerMipmap : uint8_t {
-  Mode_Neart,
-  Mode_Linear,
+  Mode_Neart = 0x01,
+  Mode_Linear = 0x02,
 };
 
 enum SamplerWrap : uint8_t {
-  Repeat,
-  Mirrored_Repeat,
-  Clamp_to_Edge,
-  Clamp_to_Border,
-  Mirror_Clamp_to_edge,
+  Repeat = 0x01,
+  Mirrored_Repeat = 0x02,
+  Clamp_to_Edge = 0x04,
+  Clamp_to_Border = 0x08,
+  Mirror_Clamp_to_edge = 0x010,
 };
 
 enum BlendFactor : uint8_t {
-  Src_Alpha,
-  Dst_Alpha,
-  Minus_Src_Alpha,
+  Src_Alpha = 0x01,
+  Dst_Alpha = 0x02,
+  Minus_Src_Alpha = 0x04,
 };
 
-struct Renderer {
-  Renderer(struct VulkanContext *ctx);
-  ~Renderer();
-
-  struct CommandBuffer *acquireCommandBuffer();
-  struct Shader *createShader(const char *fileName,
-                              ShaderStage stage = ShaderStage::NONE);
-  struct Pipeline *createPipeline(const struct PipelineInfo &info);
-  struct Pipeline *
-  createComputePipeline(const struct ComputePipelineInfo &info);
-  struct Buffer *createBuffer(const struct BufferInfo &info);
-  struct Texture *createImage(const struct TextureInfo &info);
-
-  void waitDeviceIdle();
-  void submit();
-
-  uint64_t gpuAddress(struct Buffer *buffer);
-
-private:
-  uint32_t lastTextureCount = -1;
-  uint32_t lastCubemapCount = -1;
-  struct VulkanContext *ctx = nullptr;
+enum DescriptorType : uint8_t {
+  Sampler = 0,
+  Combined_Image_Sampler = 1,
+  Sampled_Image = 2,
+  Storage_Image = 3,
+  Uniform_Texel_Buffer = 4,
+  Storage_Texel_Buffer = 5,
+  Uniform_Buffer = 6,
+  Storage_Buffer = 7,
+  Uniform_Buffer_Dynamic = 8,
+  Storage_Buffer_Dynamic = 9,
+  Input_Attachment = 10,
 };
 
-struct WindowInfo {
-  uint32_t width;
-  uint32_t height;
-  const char *appName = "";
-  bool isFullscreen = false;
-  bool allowResize = false;
+enum PoolFlags : uint8_t {
+  Invalid = 0x7,
+  Free_Descriptor_Set = 0x01,
+  Update_After_Bind = 0x02,
+  Host_Only = 0x04,
+};
+
+enum SetLayoutFlags : uint8_t {
+  Layout_Invalid = 0x0,
+  Layout_Update_After_Bind_Pool = 0x02,
+  Push_Descriptor_Bit = 0x04,
+  Emedded_Imutable_Sampler_Bit = 0x8,
+  Indirect_Bindable_Bit = 0x010,
+  Host_Only_Pool_Bit = 0x020,
+};
+
+enum DescriptorBinding : uint8_t {
+  Update_After_bind = 0x1,
+  Update_Unused_While_Pending = 0x02,
+  Partially_Bound = 0x04,
+  Variable_Descriptor_Count = 0x08,
+};
+
+struct RendererDefault {
+  bool defaultDescriptorPool = true;
+  bool enablePipelineCache = false;
 };
 
 struct QueueFamilyIndices {
@@ -188,44 +198,17 @@ struct QueueFamilyIndices {
   }
 };
 
-struct CommandBuffer {
-  CommandBuffer(VulkanContext *ctx);
-
-  void cmdBeginRendering(const struct BeginInfo &info);
-  void cmdEndRendering();
-  void bindPipeline(Pipeline *pipeline);
-  void bindComputePipeline(Pipeline *pipeline);
-  void bindVertexBuffer(uint32_t firstBinding, Buffer *buffer,
-                        uint32_t offset = 0);
-  void bindIndexBuffer(Buffer *buffer, VkDeviceSize offset,
-                       IndexType indexType);
-  void cmdDraw(uint32_t vertexCount, uint32_t instanceCount = 1,
-               uint32_t firstIndex = 0, uint32_t firstIntance = 0);
-  void cmdDrawIndex(uint32_t indexCount, uint32_t instanceCount = 1,
-                    uint32_t firstIndex = 0, int32_t vertexOffset = 0,
-                    uint32_t firstInstance = 0);
-  void cmdBindDepthState(const struct DepthState &depthInfo);
-  void cmdPushConstant(const void *push,
-                       uint32_t size = GENERAL_PUSHCONSTANT_SIZE);
-  void cmdDispatchThreadGroups(const struct DispatchThreadInfo &info);
-
-  void update(struct Buffer *buffer, const void *data, size_t size);
-
-  Pipeline *lastBindPipline = nullptr;
-  Pipeline *lastBindComputePipeline = nullptr;
-
-private:
-  VulkanContext *ctx;
-};
-
 struct VulkanContext {
-  VulkanContext(GLFWwindow *window, const char *appName);
+  VulkanContext(GLFWwindow *window, const char *appName,
+                const RendererDefault &defaults);
   ~VulkanContext();
 
   GLFWwindow *window = nullptr;
   const char *appName;
   uint32_t frameIndex = 0;
   uint32_t imageIndex = 0;
+  uint32_t minImageCount;
+  struct RendererDefault defaults;
 
   VkInstance instance;
   VkPhysicalDevice physicalDevice;
@@ -262,7 +245,9 @@ struct VulkanContext {
   std::vector<VkCommandBuffer> commandBuffers;
 
   VkShaderModule createShaderModule(uint32_t codeSize, const void *code);
-  VkPipelineLayout createPipelineLayout(uint32_t pushConstantSize);
+  VkPipelineLayout
+  createPipelineLayout(uint32_t pushConstantSize,
+                       VkDescriptorSetLayout setLayout = VK_NULL_HANDLE);
   VkPipeline createGraphicePipeline(VkGraphicsPipelineCreateInfo &info);
 
 #ifdef MAI_USE_VMA
@@ -308,7 +293,8 @@ struct VulkanContext {
                              uint32_t layerCount);
   void copyBuffeToImage(VkBuffer buffer, VkImage image, uint32_t width,
                         uint32_t height, bool isCube);
-
+  void copyBuffeToImage(VkBuffer buffer, VkImage image, VkRect2D imageRegion,
+                        uint32_t bufferRowLength);
   void updateDescriptorImageWrite(VkImageView imageView, VkSampler sampler,
                                   uint32_t imageIndex, bool isCubemap = false);
 
@@ -339,6 +325,78 @@ private:
                           VkMemoryPropertyFlags properties);
 };
 
+struct Renderer {
+  Renderer(struct VulkanContext *ctx, const struct RendererDefault &defaults);
+  ~Renderer();
+
+  struct CommandBuffer *acquireCommandBuffer();
+  struct Shader *createShader(const char *fileName,
+                              ShaderStage stage = ShaderStage::NONE);
+  struct Pipeline *createPipeline(const struct PipelineInfo &info);
+  struct Pipeline *
+  createComputePipeline(const struct ComputePipelineInfo &info);
+  struct Buffer *createBuffer(const struct BufferInfo &info);
+  struct Texture *createImage(const struct TextureInfo &info);
+  struct Descriptor *createDescriptor(const struct DescriptorInfo &info);
+
+  void waitDeviceIdle();
+  void submit();
+
+  uint64_t gpuAddress(struct Buffer *buffer);
+  void *getMappedPtr(struct Buffer *buffer, uint32_t size = 0);
+  void flushMappedMemeory(struct Buffer *buffer, VkDeviceSize offset,
+                          VkDeviceSize size);
+  struct VulkanContext *getVulkanContext() { return ctx; }
+
+private:
+  uint32_t lastTextureCount = 0;
+  uint32_t lastCubemapCount = 0;
+  struct RendererDefault defaults;
+  struct VulkanContext *ctx = nullptr;
+};
+
+struct WindowInfo {
+  uint32_t width;
+  uint32_t height;
+  const char *appName = "";
+  bool isFullscreen = false;
+  bool allowResize = false;
+};
+
+struct CommandBuffer {
+  CommandBuffer(VulkanContext *ctx);
+
+  void cmdBeginRendering(const struct BeginInfo &info);
+  void cmdEndRendering();
+  void bindPipeline(Pipeline *pipeline, Descriptor *descriptor = nullptr);
+  void bindComputePipeline(Pipeline *pipeline);
+  void bindVertexBuffer(uint32_t firstBinding, Buffer *buffer,
+                        uint32_t offset = 0);
+  void bindIndexBuffer(Buffer *buffer, VkDeviceSize offset,
+                       IndexType indexType);
+  void cmdDraw(uint32_t vertexCount, uint32_t instanceCount = 1,
+               uint32_t firstIndex = 0, uint32_t firstIntance = 0);
+  void cmdDrawIndex(uint32_t indexCount, uint32_t instanceCount = 1,
+                    uint32_t firstIndex = 0, int32_t vertexOffset = 0,
+                    uint32_t firstInstance = 0);
+  void cmdBindDepthState(const struct DepthState &depthInfo);
+  void cmdBindViewport(const struct Viewport &viewport);
+  void cmdBindScissorRect(const VkRect2D &scissor);
+  void cmdPushConstant(const void *push,
+                       uint32_t size = GENERAL_PUSHCONSTANT_SIZE);
+  void cmdDispatchThreadGroups(const struct DispatchThreadInfo &info);
+
+  void update(struct Buffer *buffer, const void *data, size_t size);
+  void update(struct Texture *texture, const struct TextureRangeDesc &range,
+              const void *data, uint32_t bufferRowLength);
+
+  Pipeline *lastBindPipline = nullptr;
+  Pipeline *lastBindComputePipeline = nullptr;
+
+private:
+  VulkanContext *ctx;
+};
+
 struct BeginInfo {
   float clearColor[4] = {0.05f, 0.05f, 0.05f, 1.0f};
   struct Texture *texture = nullptr;
@@ -348,10 +406,23 @@ struct DepthState {
   bool depthWriteEnable = false;
   CompareOp compareOp = CompareOp::Always;
 };
+
+struct Viewport {
+  float x;
+  float y;
+  float width;
+  float height;
+};
+
 struct DispatchThreadInfo {
   uint32_t width = 1;
   uint32_t height = 1;
   uint32_t depth = 1;
+};
+
+struct TextureRangeDesc {
+  VkOffset3D offset;
+  VkExtent3D extent;
 };
 
 struct VertexAttribute {
@@ -399,6 +470,7 @@ struct PipelineInfo {
   SpecInfo specInfo;
   MaiColorInfo color;
   VkFormat depthFormat;
+  VkDescriptorSetLayout setLayout = VK_NULL_HANDLE;
   CullMode cullMode = CullMode::None;
   PrimitiveTopology topology = PrimitiveTopology::Triangle_List;
   PolygonMode polygon = PolygonMode::Fill;
@@ -449,6 +521,37 @@ struct TextureInfo {
   Dimissions dimensions;
   const void *data;
   TextureUsage usage;
+  bool updateDescriptor = true;
+};
+
+struct PoolSize {
+  DescriptorType type;
+  uint32_t size = 0;
+};
+
+struct SetLayoutBinding {
+  uint32_t binding;
+  DescriptorType desctype;
+  uint32_t descCount;
+  ShaderStage stage;
+};
+
+struct DescriptorInfo {
+  MAIFlags flags = Invalid;
+  MAIFlags setLayoutFlags = Layout_Invalid;
+  std::vector<PoolSize> poolSize;
+  uint32_t maxSets;
+  std::vector<MAIFlags> bindingFlags;
+  std::vector<SetLayoutBinding> setLayoutBinding;
+  bool minimal = false;
+};
+
+struct DescriptorWriteInfo {
+  VkImageView imageView = VK_NULL_HANDLE;
+  VkSampler sampler = VK_NULL_HANDLE;
+  uint32_t binding = 0;
+  uint32_t count;
+  DescriptorType descType;
 };
 
 #ifdef MAI_USE_VMA
@@ -512,6 +615,7 @@ struct Buffer {
 
   VkBuffer &getBuffer() { return buf_; }
   VmaAllocation &getAllocation() { return alloc_; }
+  VmaAllocationInfo getAllocaInfo() { return allocaInfo_; }
   VkBufferUsageFlags getBufferUsage() const { return usageFlags; }
 
 private:
@@ -633,9 +737,32 @@ private:
   VkPipelineLayout layout_;
 };
 
+struct Descriptor {
+  Descriptor(VkDevice &device, VkDescriptorPool pool,
+             std::vector<VkDescriptorSet> sets, VkDescriptorSetLayout layout)
+      : device(device), pool_(pool), sets_(sets), setLayout_(layout) {}
+  ~Descriptor() {
+    vkDestroyDescriptorSetLayout(device, setLayout_, nullptr);
+    vkDestroyDescriptorPool(device, pool_, nullptr);
+  }
+
+  VkDescriptorPool &getDescriptorPool() { return pool_; }
+  const std::vector<VkDescriptorSet> &getDescriptorSet() { return sets_; }
+  VkDescriptorSetLayout &getDescriptorSetLayout() { return setLayout_; }
+
+  void updateDescriptorWrite(const struct DescriptorWriteInfo &info);
+
+private:
+  VkDevice &device;
+  VkDescriptorPool pool_;
+  std::vector<VkDescriptorSet> sets_;
+  VkDescriptorSetLayout setLayout_;
+};
+
 GLFWwindow *initWindow(const WindowInfo &info);
 Renderer *initVulkanWithSwapChain(GLFWwindow *window = nullptr,
-                                  const char *appName = nullptr);
+                                  const char *appName = nullptr,
+                                  const struct RendererDefault &defaults = {});
 
 }; // namespace MAI
 
@@ -645,10 +772,14 @@ Renderer *initVulkanWithSwapChain(GLFWwindow *window = nullptr,
 #include <cassert>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <set>
 #include <stdexcept>
+#include <thread>
 
 namespace MAI {
+
+std::mutex mtx;
 
 constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 constexpr uint32_t MAX_TEXTURES = 1024;
@@ -727,6 +858,11 @@ VkSamplerMipmapMode getSamplerMipmapMode(SamplerMipmap mode);
 VkSamplerAddressMode getSamplerWrap(SamplerWrap wrap);
 VkCompareOp getCompareOp(CompareOp op);
 VkBlendFactor getBlendFactor(BlendFactor factor);
+VkDescriptorType getDescriptorType(DescriptorType type);
+VkDescriptorPoolCreateFlags getDescriptorPoolCreateFlags(MAIFlags flags);
+VkDescriptorBindingFlags getDescriptorBindingFlags(MAIFlags binding);
+VkDescriptorSetLayoutCreateFlags
+getDescriptorSetLayoutCreateFlags(MAIFlags layoutFlags);
 
 #ifdef MAI_INCLUDE_GLSLANG
 void compileShaderGlslang(ShaderStage stage, const char *code,
@@ -735,7 +871,8 @@ void compileShaderGlslang(ShaderStage stage, const char *code,
 glslang_resource_t getGLSLangResources(const VkPhysicalDeviceLimits &limits);
 #endif
 
-Renderer::Renderer(VulkanContext *ctx) : ctx(ctx) {}
+Renderer::Renderer(VulkanContext *ctx, const struct RendererDefault &defaults)
+    : ctx(ctx), defaults(defaults) {}
 
 struct CommandBuffer *Renderer::acquireCommandBuffer() {
   ctx->acquireSwapChainIndex();
@@ -1000,7 +1137,7 @@ struct Pipeline *Renderer::createPipeline(const struct PipelineInfo &info_) {
   };
 
   VkPipelineLayout pipelineLayout =
-      ctx->createPipelineLayout(info_.pushConstantSize);
+      ctx->createPipelineLayout(info_.pushConstantSize, info_.setLayout);
 
   VkGraphicsPipelineCreateInfo pipelineInfo{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -1308,7 +1445,8 @@ struct Texture *Renderer::createImage(const struct TextureInfo &info) {
       new Texture(ctx->device, image, imageMemory, imageView, sampler, format_);
 #endif
 
-  if (info.usage == MAI::Attachment_Bit)
+  if (info.usage == MAI::Attachment_Bit || !defaults.defaultDescriptorPool ||
+      !info.updateDescriptor)
     return texture;
 
   if (info.type == MAI::TextureType_2D) {
@@ -1329,6 +1467,133 @@ struct Texture *Renderer::createImage(const struct TextureInfo &info) {
   }
 
   return texture;
+}
+
+struct Descriptor *
+Renderer::createDescriptor(const struct DescriptorInfo &info) {
+  std::vector<VkDescriptorPoolSize> poolSize;
+  poolSize.reserve(info.poolSize.size());
+  for (PoolSize p : info.poolSize)
+    poolSize.emplace_back(VkDescriptorPoolSize{
+        .type = getDescriptorType(p.type),
+        .descriptorCount = p.size,
+    });
+
+  VkDescriptorPoolCreateInfo poolInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .maxSets = info.maxSets,
+      .poolSizeCount = (uint32_t)poolSize.size(),
+      .pPoolSizes = poolSize.data(),
+  };
+  if ((info.flags & MAI::PoolFlags::Invalid) == 0)
+    poolInfo.flags = getDescriptorPoolCreateFlags(info.flags);
+
+  VkDescriptorPool pool;
+  if (vkCreateDescriptorPool(ctx->device, &poolInfo, nullptr, &pool) !=
+      VK_SUCCESS)
+    throw std::runtime_error("failed to create descritptor fool");
+
+  // descriptor layout
+  std::vector<VkDescriptorBindingFlags> bindingFlags;
+  VkDescriptorSetLayoutBindingFlagsCreateInfo flagsCreateInfo;
+
+  if (!info.bindingFlags.empty() && !info.minimal) {
+    bindingFlags.reserve(info.bindingFlags.size());
+    for (auto it : info.bindingFlags)
+      bindingFlags.emplace_back(getDescriptorBindingFlags(it));
+    flagsCreateInfo = {
+        .sType =
+            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        .bindingCount = (uint32_t)bindingFlags.size(),
+        .pBindingFlags = bindingFlags.data(),
+    };
+  }
+  if (!info.minimal)
+    assert(!info.setLayoutBinding.empty());
+
+  std::vector<VkDescriptorSetLayoutBinding> uboLayout;
+  uboLayout.reserve(info.setLayoutBinding.size());
+  for (auto it : info.setLayoutBinding)
+    uboLayout.emplace_back(VkDescriptorSetLayoutBinding{
+        .binding = it.binding,
+        .descriptorType = getDescriptorType(it.desctype),
+        .descriptorCount = it.descCount,
+        .stageFlags = getShaderStage(it.stage),
+    });
+
+  VkDescriptorSetLayoutCreateInfo layoutInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = (uint32_t)uboLayout.size(),
+      .pBindings = uboLayout.data(),
+  };
+
+  VkDescriptorSetLayout setLayout;
+  if (!info.minimal) {
+    if (vkCreateDescriptorSetLayout(ctx->device, &layoutInfo, nullptr,
+                                    &setLayout) != VK_SUCCESS)
+      throw std::runtime_error("failed to create descriptor set layouts");
+  }
+
+  std::vector<VkDescriptorSet> descriptorSets;
+  descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+  std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, setLayout);
+  uint32_t counts[] = {MAX_TEXTURES, MAX_TEXTURES};
+
+  VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{
+      .sType =
+          VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
+      .descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
+      .pDescriptorCounts = counts,
+  };
+
+  VkDescriptorSetAllocateInfo allocInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .pNext = &countInfo,
+      .descriptorPool = pool,
+      .descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
+      .pSetLayouts = layouts.data(),
+  };
+
+  if (!info.minimal) {
+    if (vkAllocateDescriptorSets(ctx->device, &allocInfo,
+                                 descriptorSets.data()) != VK_SUCCESS)
+      throw std::runtime_error("failed to allocate descriptor set");
+  }
+
+  Descriptor *desc =
+      new Descriptor(ctx->device, pool, descriptorSets, setLayout);
+  return desc;
+}
+
+void Descriptor::updateDescriptorWrite(const struct DescriptorWriteInfo &info) {
+
+  VkDescriptorImageInfo imageInfo{
+      .imageView = info.imageView,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+
+  VkDescriptorImageInfo samplerInfo{
+      .sampler = info.sampler,
+  };
+
+  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    VkWriteDescriptorSet descriptorWrite = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = sets_[i],
+        .dstBinding = info.binding,
+        .dstArrayElement = info.count,
+        .descriptorCount = 1,
+        .descriptorType = getDescriptorType(info.descType),
+    };
+    if (info.imageView != VK_NULL_HANDLE)
+      descriptorWrite.pImageInfo = &imageInfo;
+    if (info.sampler != VK_NULL_HANDLE)
+      descriptorWrite.pImageInfo = &samplerInfo;
+
+    VkWriteDescriptorSet writes[] = {descriptorWrite};
+
+    vkUpdateDescriptorSets(device, 1, writes, 0, nullptr);
+  }
 }
 
 CommandBuffer::CommandBuffer(VulkanContext *ctx) : ctx(ctx) {}
@@ -1437,17 +1702,22 @@ void CommandBuffer::cmdEndRendering() {
   lastBindPipline = nullptr;
 }
 
-void CommandBuffer::bindPipeline(Pipeline *pipeline) {
+void CommandBuffer::bindPipeline(Pipeline *pipeline, Descriptor *descriptor) {
   assert(pipeline->getPipeline() != VK_NULL_HANDLE);
   lastBindPipline = pipeline;
   if (lastBindPipline != nullptr) {
     vkCmdBindPipeline(ctx->commandBuffers[ctx->frameIndex],
                       VK_PIPELINE_BIND_POINT_GRAPHICS,
                       lastBindPipline->getPipeline());
-    vkCmdBindDescriptorSets(ctx->commandBuffers[ctx->frameIndex],
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            lastBindPipline->getPipelineLayout(), 0, 1,
-                            &ctx->descriptorSets[ctx->frameIndex], 0, nullptr);
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    if (ctx->defaults.defaultDescriptorPool)
+      set = ctx->descriptorSets[ctx->frameIndex];
+    if (descriptor != nullptr)
+      set = descriptor->getDescriptorSet()[ctx->frameIndex];
+    assert(set != VK_NULL_HANDLE);
+    vkCmdBindDescriptorSets(
+        ctx->commandBuffers[ctx->frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS,
+        lastBindPipline->getPipelineLayout(), 0, 1, &set, 0, nullptr);
   }
 }
 
@@ -1502,6 +1772,26 @@ void CommandBuffer::cmdBindDepthState(const struct DepthState &depthInfo) {
       (depthInfo.compareOp != CompareOp::Always && depthInfo.depthWriteEnable)
           ? VK_TRUE
           : VK_FALSE);
+}
+
+void CommandBuffer::cmdBindViewport(const struct Viewport &viewport) {
+  VkViewport viewportInfo = {
+      .x = viewport.x,
+      .y = viewport.y,
+      .width = viewport.width,
+      .height = viewport.height,
+      .minDepth = 0.0f,
+      .maxDepth = 1.0f,
+  };
+  vkCmdSetViewport(ctx->commandBuffers[ctx->frameIndex], 0, 1, &viewportInfo);
+}
+
+void CommandBuffer::cmdBindScissorRect(const VkRect2D &rect) {
+  VkRect2D scissorInfo = {
+      .offset = {rect.offset.x, rect.offset.y},
+      .extent = {rect.extent.width, rect.extent.height},
+  };
+  vkCmdSetScissor(ctx->commandBuffers[ctx->frameIndex], 0, 1, &scissorInfo);
 }
 
 void CommandBuffer::cmdPushConstant(const void *push, uint32_t size) {
@@ -1628,6 +1918,75 @@ void CommandBuffer::update(struct Buffer *buffer, const void *data,
   }
 }
 
+void CommandBuffer::update(struct Texture *texture,
+                           const struct TextureRangeDesc &range,
+                           const void *data, uint32_t bufferRowLength) {
+  const VkRect2D imageRegion = {
+      .offset = {.x = range.offset.x, .y = range.offset.y},
+      .extent = {.width = range.extent.width, .height = range.extent.height},
+  };
+  VkDeviceSize imageSize = bufferRowLength * range.extent.height * 4;
+  uint32_t layerCount = 1;
+
+#ifdef MAI_USE_VMA
+  VkBuffer stagingBuffer;
+  VmaAllocation stagingAllocation;
+  VmaAllocationInfo stagingAllocInfo;
+
+  ctx->createBuffer(
+      {
+          .size = imageSize,
+          .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+          .allocflags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                        VMA_ALLOCATION_CREATE_MAPPED_BIT,
+          .memoryUsage = VMA_MEMORY_USAGE_AUTO,
+      },
+      stagingBuffer, stagingAllocation, stagingAllocInfo);
+  memcpy(stagingAllocInfo.pMappedData, data, imageSize);
+
+  ctx->transitionImageLayout(texture->getImage(), VK_FORMAT_R8G8B8A8_SRGB,
+                             VK_IMAGE_LAYOUT_UNDEFINED,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, layerCount);
+
+  ctx->copyBuffeToImage(stagingBuffer, texture->getImage(), imageRegion,
+                        bufferRowLength);
+
+  ctx->transitionImageLayout(texture->getImage(), VK_FORMAT_R8G8B8A8_SRGB,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             layerCount);
+
+  vmaDestroyBuffer(ctx->allocator, stagingBuffer, stagingAllocation);
+#else
+  VkBuffer stagingBuffer;
+  VkDeviceMemory stagingMemory;
+
+  ctx->createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                    stagingBuffer, stagingMemory);
+
+  void *ptr;
+  vkMapMemory(ctx->device, stagingMemory, 0, imageSize, 0, &ptr);
+  memcpy(ptr, data, static_cast<size_t>(imageSize));
+  vkUnmapMemory(ctx->device, stagingMemory);
+  ctx->transitionImageLayout(texture->getImage(), VK_FORMAT_R8G8B8A8_SRGB,
+                             VK_IMAGE_LAYOUT_UNDEFINED,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, layerCount);
+
+  ctx->copyBuffeToImage(stagingBuffer, texture->getImage(), imageRegion,
+                        bufferRowLength);
+
+  ctx->transitionImageLayout(texture->getImage(), VK_FORMAT_R8G8B8A8_SRGB,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             layerCount);
+
+  vkDestroyBuffer(ctx->device, stagingBuffer, nullptr);
+  vkFreeMemory(ctx->device, stagingMemory, nullptr);
+#endif
+}
+
 void Renderer::waitDeviceIdle() { vkDeviceWaitIdle(ctx->device); }
 
 void Renderer::submit() {
@@ -1688,6 +2047,33 @@ uint64_t Renderer::gpuAddress(struct Buffer *buffer) {
   return address;
 }
 
+void *Renderer::getMappedPtr(struct Buffer *buffer, uint32_t size) {
+#ifdef MAI_USE_VMA
+  return buffer->getAllocaInfo().pMappedData;
+#else
+  void *ptr;
+  vkMapMemory(ctx->device, buffer->getBufferMem(), 0, size, 0, &ptr);
+  return ptr;
+#endif
+}
+
+void Renderer::flushMappedMemeory(struct Buffer *buffer, VkDeviceSize offset,
+                                  VkDeviceSize size) {
+#ifdef MAI_USE_VMA
+  vmaFlushAllocations(ctx->allocator, 1, &buffer->getAllocation(), &offset,
+                      &size);
+#else
+  VkMappedMemoryRange range = {
+      .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+      .memory = buffer->getBufferMem(),
+      .offset = offset,
+      .size = size,
+  };
+  vkFlushMappedMemoryRanges(ctx->device, 1, &range);
+  vkUnmapMemory(ctx->device, buffer->getBufferMem());
+#endif
+}
+
 Renderer::~Renderer() { delete ctx; }
 
 GLFWwindow *initWindow(const WindowInfo &info) {
@@ -1711,17 +2097,20 @@ GLFWwindow *initWindow(const WindowInfo &info) {
   return window;
 }
 
-Renderer *initVulkanWithSwapChain(GLFWwindow *window, const char *appName) {
+Renderer *initVulkanWithSwapChain(GLFWwindow *window, const char *appName,
+                                  const struct RendererDefault &defaults) {
   assert(window);
   assert(appName != nullptr);
-  VulkanContext *ctx = new VulkanContext(window, appName);
-  Renderer *ren = new Renderer(ctx);
+
+  VulkanContext *ctx = new VulkanContext(window, appName, defaults);
+  Renderer *ren = new Renderer(ctx, defaults);
 
   return ren;
 }
 
-VulkanContext::VulkanContext(GLFWwindow *window, const char *name)
-    : window(window), appName(name) {
+VulkanContext::VulkanContext(GLFWwindow *window, const char *name,
+                             const struct RendererDefault &defaults)
+    : window(window), appName(name), defaults(defaults) {
   createInstance();
   setupDebugger();
   createSurfaceKHR();
@@ -1738,9 +2127,12 @@ VulkanContext::VulkanContext(GLFWwindow *window, const char *name)
 
   createCommandPool();
   createCommandBuffer();
-  createDescriptorPool();
-  createDescriptorSetLayout();
-  createDescriptorSets();
+
+  if (defaults.defaultDescriptorPool) {
+    createDescriptorPool();
+    createDescriptorSetLayout();
+    createDescriptorSets();
+  }
 }
 
 void VulkanContext::createInstance() {
@@ -1981,6 +2373,8 @@ void VulkanContext::createSwapChain() {
       imageCount < swapChainDetails.capabilities.maxImageCount)
     imageCount = swapChainDetails.capabilities.maxImageCount;
 
+  minImageCount = imageCount;
+
   VkSwapchainCreateInfoKHR createInfo{
       .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
       .surface = surface,
@@ -2109,6 +2503,7 @@ void VulkanContext::createDescriptorPool() {
       {VK_DESCRIPTOR_TYPE_SAMPLER, MAX_TEXTURES * MAX_FRAMES_IN_FLIGHT},
       {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_TEXTURES * MAX_FRAMES_IN_FLIGHT},
   };
+
   VkDescriptorPoolCreateInfo poolInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
@@ -2166,6 +2561,7 @@ void VulkanContext::createDescriptorSetLayout() {
       .bindingCount = static_cast<uint32_t>(bindingFlags.size()),
       .pBindingFlags = bindingFlags.data(),
   };
+
   VkDescriptorSetLayoutCreateInfo layoutInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
       .pNext = &flagsCreateInfo,
@@ -2243,6 +2639,7 @@ void VulkanContext::endSingleCommandBuffer(VkCommandBuffer commandBuffer) {
       .pCommandBuffers = &commandBuffer,
   };
 
+  std::lock_guard<std::mutex> lock(mtx);
   vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
   vkQueueWaitIdle(graphicsQueue);
   vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
@@ -2308,7 +2705,6 @@ void VulkanContext::copyBuffeToImage(VkBuffer buffer, VkImage image,
         .bufferOffset = 0,
         .bufferRowLength = 0,
         .bufferImageHeight = 0,
-
         .imageSubresource =
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -2344,6 +2740,29 @@ void VulkanContext::copyBuffeToImage(VkBuffer buffer, VkImage image,
         commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         static_cast<uint32_t>(regions.size()), regions.data());
   }
+
+  endSingleCommandBuffer(commandBuffer);
+}
+
+void VulkanContext::copyBuffeToImage(VkBuffer buffer, VkImage image,
+                                     VkRect2D imageRegion,
+                                     uint32_t bufferRowLength) {
+  VkCommandBuffer commandBuffer = beginSingleCommandBuffer();
+  VkBufferImageCopy region = {
+      .bufferOffset = 0,
+      .bufferRowLength = bufferRowLength,
+      .imageSubresource =
+          {
+              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+              .mipLevel = 0,
+              .baseArrayLayer = 0,
+              .layerCount = 1,
+          },
+      .imageOffset = {imageRegion.offset.x, imageRegion.offset.y, 0},
+      .imageExtent = {imageRegion.extent.width, imageRegion.extent.height, 1},
+  };
+  vkCmdCopyBufferToImage(commandBuffer, buffer, image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
   endSingleCommandBuffer(commandBuffer);
 }
@@ -2439,7 +2858,8 @@ VkShaderModule VulkanContext::createShaderModule(uint32_t codeSize,
   return sm;
 }
 VkPipelineLayout
-VulkanContext::createPipelineLayout(uint32_t pushConstantSize) {
+VulkanContext::createPipelineLayout(uint32_t pushConstantSize,
+                                    VkDescriptorSetLayout setLayout) {
   VkPushConstantRange range = {
       .stageFlags = VK_SHADER_STAGE_ALL,
       .offset = 0,
@@ -2448,11 +2868,16 @@ VulkanContext::createPipelineLayout(uint32_t pushConstantSize) {
 
   VkPipelineLayoutCreateInfo createInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 1,
-      .pSetLayouts = &descriptorSetLayout,
       .pushConstantRangeCount = 1,
       .pPushConstantRanges = &range,
   };
+  if (setLayout != VK_NULL_HANDLE) {
+    createInfo.setLayoutCount = 1;
+    createInfo.pSetLayouts = &setLayout;
+  } else if (defaults.defaultDescriptorPool) {
+    createInfo.setLayoutCount = 1;
+    createInfo.pSetLayouts = &descriptorSetLayout;
+  }
 
   VkPipelineLayout pipelineLayout;
   if (vkCreatePipelineLayout(device, &createInfo, nullptr, &pipelineLayout) !=
@@ -2738,8 +3163,10 @@ void VulkanContext::acquireSwapChainIndex() {
 
 VulkanContext::~VulkanContext() {
 
-  vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
-  vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+  if (defaults.defaultDescriptorPool) {
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+  }
 
   vkDestroyCommandPool(device, commandPool, nullptr);
 
@@ -3212,6 +3639,79 @@ VkBlendFactor getBlendFactor(BlendFactor factor) {
     return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
   }
   assert(false);
+}
+
+VkDescriptorType getDescriptorType(DescriptorType type) {
+  switch (type) {
+  case MAI::Sampler:
+    return VK_DESCRIPTOR_TYPE_SAMPLER;
+  case MAI::Combined_Image_Sampler:
+    return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  case Sampled_Image:
+    return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+  case Storage_Image:
+    return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+  case Uniform_Texel_Buffer:
+    return VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+  case Storage_Texel_Buffer:
+    return VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+  case Uniform_Buffer:
+    return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  case Storage_Buffer:
+    return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  case Uniform_Buffer_Dynamic:
+    return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+  case Storage_Buffer_Dynamic:
+    return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+  case MAI::Input_Attachment:
+    return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+  }
+  assert(false);
+}
+
+VkDescriptorPoolCreateFlags getDescriptorPoolCreateFlags(MAIFlags flags) {
+  VkDescriptorPoolCreateFlags Poolflags;
+  if (flags & MAI::Invalid)
+    assert(false);
+  if (flags & Free_Descriptor_Set)
+    Poolflags |= VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+  if (flags & Update_After_Bind)
+    Poolflags |= VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+  if (flags & Host_Only)
+    Poolflags |= VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_EXT;
+  return Poolflags;
+}
+
+VkDescriptorBindingFlags getDescriptorBindingFlags(MAIFlags binding) {
+  VkDescriptorBindingFlags flags;
+  if (flags & MAI::Update_After_bind)
+    flags |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+  if (flags & MAI::Update_Unused_While_Pending)
+    flags |= VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+  if (flags & MAI::Partially_Bound)
+    flags |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+  if (flags & MAI::Variable_Descriptor_Count)
+    flags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+  return flags;
+}
+
+VkDescriptorSetLayoutCreateFlags
+getDescriptorSetLayoutCreateFlags(MAIFlags layoutFlags) {
+  if (layoutFlags & Layout_Invalid)
+    assert(false);
+  VkDescriptorSetLayoutCreateFlags flags;
+  if (layoutFlags & Layout_Update_After_Bind_Pool)
+    flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+  if (layoutFlags & Push_Descriptor_Bit)
+    flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT;
+  if (layoutFlags & Emedded_Imutable_Sampler_Bit)
+    flags |=
+        VK_DESCRIPTOR_SET_LAYOUT_CREATE_EMBEDDED_IMMUTABLE_SAMPLERS_BIT_EXT;
+  if (layoutFlags & Indirect_Bindable_Bit)
+    flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_INDIRECT_BINDABLE_BIT_NV;
+  if (layoutFlags & Host_Only_Pool_Bit)
+    flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_HOST_ONLY_POOL_BIT_EXT;
+  return flags;
 }
 
 #ifdef MAI_INCLUDE_GLSLANG
