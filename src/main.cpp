@@ -8,6 +8,7 @@
 #include <assimp/scene.h>
 
 #include "stbi_image.h"
+#include "textures.h"
 
 int main() {
   MaiApp *mai = new MaiApp();
@@ -17,7 +18,6 @@ int main() {
 
   Entities *entities = new Entities(mai->ren, format);
 
-  int currSkybox = 0;
   int currentAssets = 0;
 
   auto draw = [&](MAI::CommandBuffer *buff, uint32_t width, uint32_t height,
@@ -25,25 +25,24 @@ int main() {
     glm::mat4 p = glm::perspective(glm::radians(60.0f), ratio, 0.1f, 1000.0f);
     p[1][1] *= -1;
     glm::mat4 view = mai->camera->getViewMatrix();
+    glm::vec3 cameraPos = mai->camera->getPosition();
     skybox->draw({
         .buff = buff,
-        .id = (uint32_t)currSkybox,
         .ratio = ratio,
         .proj = p,
         .view = view,
-        .cameraPos = mai->camera->getPosition(),
+        .cameraPos = cameraPos,
     });
     {
       buff->cmdBindDepthState({
           .depthWriteEnable = true,
           .compareOp = MAI::CompareOp::Less,
       });
-      entities->drawModels(buff, p, view, currentAssets);
+      entities->draw(buff, p, view, cameraPos);
     }
 
     buff->cmdBindDepthState({});
     // imgui
-    std::vector<Cubemap> infos = skybox->getSkyboxInfo();
     if (const ImGuiViewport *v = ImGui::GetMainViewport()) {
       ImGui::SetNextWindowPos({v->WorkPos.x, v->WorkPos.y}, ImGuiCond_Always,
                               {0.0f, 0.0f});
@@ -52,19 +51,11 @@ int main() {
       ImGui::SetNextWindowBgAlpha(0.50f);
     }
     ImGui::Begin("Viewport");
-    // skybox info
-    ImGui::Text("Skyboxs");
-    for (auto it : infos) {
-      ImGui::RadioButton(it.name.c_str(), &currSkybox, it.id);
-    }
-    // assets
-    auto models = entities->getModelInfos();
-    ImGui::NewLine();
-    ImGui::Text("Assets");
-    for (auto &it : models)
-      ImGui::RadioButton(it.name.c_str(), &currentAssets, it.id);
-
+    skybox->guiWidgets();
+    entities->guiWidget();
     ImGui::End();
+
+    entities->entityWidget();
   };
 
   auto beforeDraw = [&](MAI::CommandBuffer *buff, uint32_t width,

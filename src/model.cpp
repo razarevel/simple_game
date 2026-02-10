@@ -54,6 +54,12 @@ Model::Model(MAI::Renderer *ren, const char *filename)
   }
 
   processNodes(scene->mRootNode, scene);
+
+  for (uint32_t i = 0; i < scene->mNumMaterials; i++) {
+    const aiMaterial *mat = scene->mMaterials[i];
+    loadTextures(mat, aiTextureType_DIFFUSE, filename);
+  }
+
   aiReleaseImport(scene);
 }
 
@@ -104,11 +110,6 @@ void Model::processMeshes(const aiMesh *mesh, const aiScene *scene) {
       .indexBuffer = indexBuff,
       .indicesSize = (uint32_t)indices.size(),
   });
-
-  if (mesh->mMaterialIndex >= 0) {
-    const aiMaterial *mat = scene->mMaterials[mesh->mMaterialIndex];
-    loadTextures(mat, aiTextureType_DIFFUSE, filename);
-  }
 }
 
 void Model::draw(MAI::CommandBuffer *buff, glm::mat4 proj, glm::mat4 view,
@@ -123,8 +124,9 @@ void Model::draw(MAI::CommandBuffer *buff, glm::mat4 proj, glm::mat4 view,
       .proj = proj,
       .view = view,
       .model = model,
-      .textId = textures[0]->getIndex(),
   };
+  if (!textures.empty())
+    pc.textId = textures[0]->getIndex();
 
   for (auto &it : meshes) {
     pc.vertices = ren_->gpuAddress(it.vertexBuffer);
@@ -140,10 +142,12 @@ void Model::loadTextures(const aiMaterial *mat, aiTextureType type,
   aiString str;
   mat->GetTexture(type, 0, &str);
   std::string name = str.data;
+  std::replace(name.begin(), name.end(), '\\', '/');
+  name = name.substr(name.find_last_of('/') + 1);
 
   std::string path = dir;
-  path += "/";
-  path += str.data;
+  path += "/textures/";
+  path += name;
 
   for (auto &it : loaded)
     if (it == path)

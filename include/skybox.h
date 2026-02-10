@@ -14,7 +14,6 @@ struct Cubemap {
 
 struct DrawInfo {
   MAI::CommandBuffer *buff;
-  uint32_t id = 0;
   float ratio;
   glm::mat4 proj;
   glm::mat4 view;
@@ -29,8 +28,11 @@ struct Skybox {
   void draw(const DrawInfo &info);
   const std::vector<Cubemap> &getSkyboxInfo() { return cubemaps; }
 
+  void guiWidgets();
+
 private:
   MAI::Renderer *ren_;
   MAI::Pipeline *pipeline_ = nullptr;
   std::vector<Cubemap> cubemaps;
+  std::vector<int> currSkybox{0};
 };

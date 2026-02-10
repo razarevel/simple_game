@@ -1,7 +1,7 @@
+#include "imgui.h"
 #include <Bitmap.h>
 #include <UtilsCubemap.h>
 #include <filesystem>
-#include <iostream>
 #include <mutex>
 #include <skybox.h>
 #include <thread>
@@ -80,11 +80,20 @@ void Skybox::draw(const DrawInfo &info) {
       .view = info.view,
       .proj = info.proj,
       .cameraPos = glm::vec4(info.cameraPos, 1.0f),
-      .textureId = cubemaps[info.id].tex->getIndex(),
+      .textureId = cubemaps[currSkybox.back()].tex->getIndex(),
   };
   info.buff->bindPipeline(pipeline_);
   info.buff->cmdPushConstant(&pc);
   info.buff->cmdDraw(36);
+}
+
+void Skybox::guiWidgets() {
+  if (ImGui::TreeNode("Skybox")) {
+    for (auto it : cubemaps)
+      if (ImGui::Button(it.name.c_str()))
+        currSkybox.push_back(it.id);
+    ImGui::TreePop();
+  }
 }
 
 Skybox::~Skybox() {
