@@ -3,6 +3,7 @@
 #include "imguiRenderer.h"
 #include "mai_config.h"
 #include "mai_vk.h"
+#include <array>
 #include <functional>
 
 using DrawFrameFunc =
@@ -41,6 +42,8 @@ struct MaiApp {
 
   void run(DrawFrameFunc drawFrame, DrawFrameFunc beforeDraw,
            DrawFrameFunc afterDraw);
+
+  static std::array<bool, 2> getMods();
 
 private:
   void setMouseConfig();

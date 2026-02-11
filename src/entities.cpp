@@ -1,11 +1,12 @@
 #include "entities.h"
 #include "imgui.h"
+#include "maiApp.h"
 #include <glm/ext.hpp>
 #include <iostream>
 #include <thread>
 
-Entities::Entities(MAI::Renderer *ren, VkFormat formt)
-    : ren_(ren), format(formt) {
+Entities::Entities(MAI::Renderer *ren, GLFWwindow *window, VkFormat formt)
+    : ren_(ren), window(window), format(formt) {
   std::thread t1([&]() { assets = new Assets(ren, formt); });
   std::thread t2([&] { textures = new Textures(ren); });
   std::thread t3([&] { shapes = new Shapes(ren, formt); });
@@ -17,7 +18,7 @@ Entities::Entities(MAI::Renderer *ren, VkFormat formt)
 
 void Entities::preparePipelines() {
   MAI::Shader *vert = ren_->createShader(SHADERS_PATH "spvs/model.vspv");
-  MAI::Shader *frag = ren_->createShader(SHADERS_PATH "spvs/model.vspv");
+  MAI::Shader *frag = ren_->createShader(SHADERS_PATH "spvs/model.fspv");
   pipeline_ = ren_->createPipeline({
       .vert = vert,
       .frag = frag,
@@ -31,9 +32,14 @@ void Entities::preparePipelines() {
 void Entities::draw(MAI::CommandBuffer *buff, glm::mat4 proj, glm::mat4 view,
                     glm::vec3 cameraPos) {
   for (auto &entity : entities) {
+    EntityData &data = entity.entityData;
+    if (data.disable)
+      continue;
+
     // transformation
     glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, entity.pos);
+    model = glm::translate(model, data.pos);
+    model = glm::scale(model, data.scale);
 
     // draw
     buff->bindPipeline(pipeline_);
@@ -53,13 +59,95 @@ void Entities::draw(MAI::CommandBuffer *buff, glm::mat4 proj, glm::mat4 view,
           .proj = proj,
           .view = view,
           .model = model,
-          .tex = 0,
+          .tex = data.tm != nullptr ? data.tm->diffuse->getIndex() : 0,
           .vertx = ren_->gpuAddress(sm->vertBuff),
       };
+
       buff->cmdPushConstant(&pc);
-      buff->bindIndexBuffer(sm->indexBuff, 0, MAI::IndexType::Uint32);
+      buff->bindIndexBuffer(sm->indexBuff, 0, MAI::IndexType::Uint16);
       buff->cmdDrawIndex(sm->indicesSize);
     }
+  }
+  undoCheck();
+}
+
+void Entities::undoCheck() {
+  std::array<bool, 2> mods = MaiApp::getMods();
+
+  if (actions.empty())
+    return;
+
+  if (mods[0]) {
+
+    if (currAction < 0)
+      return;
+
+    Action action = actions[currAction];
+    for (auto &it : entities) {
+      if (it.id != action.id)
+        continue;
+      if (action.type == ENTITY) {
+        it.entityData = action.data;
+        currAction--;
+        break;
+      } else if (action.type == ADD) {
+        it.entityData.disable = true;
+        currAction--;
+        break;
+      }
+    }
+
+  }
+
+  else if (mods[1]) {
+    if (currAction != actions.size() - 1)
+      currAction++;
+
+    else if (currAction == actions.size())
+      return;
+
+    Action action = actions[currAction];
+
+    for (auto &it : entities) {
+      if (it.id != action.id)
+        continue;
+      if (action.type == ENTITY) {
+        it.entityData = action.data;
+        break;
+      }
+      if (action.type == ADD) {
+        it.entityData.disable = false;
+        break;
+      }
+    }
+
+    // if (action.type == ENTITY) {
+    // } else if (action.type == ADD) {
+    //   for (auto &it : entities)
+    //     if (it.id == action.id) {
+    //       it.entityData.disable = false;
+    //       break;
+    //     }
+    // }
+  }
+}
+
+void Entities::actionAdd(uint32_t id, ActionType type, EntityData data) {
+  if (actions.empty() || currAction == actions.size() - 1) {
+    actions.emplace_back(Action{
+        .type = type,
+        .id = id,
+        .data = data,
+    });
+    currAction++;
+  } else {
+    actions.resize(currAction + 1);
+    actions.emplace_back(Action{
+        .type = type,
+        .id = id,
+        .data = data,
+    });
+    currAction = actions.size() - 1;
   }
 }
 
@@ -71,6 +159,7 @@ void Entities::guiWidget() {
   for (auto &it : models)
     if (ImGui::Button(it.name.c_str(), ImVec2(0, 50))) {
       currentEntity++;
+      actionAdd(currentEntity);
       entities.emplace_back(Entity{
           .id = currentEntity,
           .name = it.name,
@@ -85,6 +174,7 @@ void Entities::guiWidget() {
     for (auto &it : shapesInfo)
       if (ImGui::Button(it.c_str(), ImVec2(50, 50))) {
         currentEntity++;
+        actionAdd(currentEntity);
         entities.emplace_back(Entity{
             .id = currentEntity,
             .name = it,
@@ -97,9 +187,12 @@ void Entities::guiWidget() {
   ImGui::NewLine();
   ImGui::TextWrapped("Entities");
   for (auto &it : entities) {
-    std::string name = it.name + " " + std::to_string(it.id);
-    if (ImGui::Button(name.c_str()))
-      currentEntity = (int)it.id;
+    EntityData data = it.entityData;
+    if (!data.disable) {
+      std::string name = it.name + " " + std::to_string(it.id);
+      if (ImGui::Button(name.c_str()))
+        currentEntity = (int)it.id;
+    }
   }
 }
 
@@ -112,6 +205,11 @@ void Entities::entityWidget() {
     if (it.id == currentEntity)
       entity = &it;
 
+  EntityData &data = entity->entityData;
+
+  if (data.disable)
+    return;
+
   if (const ImGuiViewport *v = ImGui::GetMainViewport()) {
     ImGui::SetNextWindowPos(
         {v->WorkPos.x + v->WorkSize.x - 15.0f, v->WorkPos.y + 100.0f},
@@ -120,9 +218,17 @@ void Entities::entityWidget() {
     ImGui::SetNextWindowSize({v->WorkSize.x * 0.3f, 0}, ImGuiCond_Always);
   }
   ImGui::Begin(entity->name.c_str());
-  ImGui::InputFloat3("Poisition", glm::value_ptr(entity->pos));
-  ImGui::InputFloat3("Rotate", glm::value_ptr(entity->rotate));
-  ImGui::InputFloat3("Scale", glm::value_ptr(entity->scale));
+
+  if (ImGui::Button("Del")) {
+    actionAdd(entity->id, ENTITY, entity->entityData);
+    data.disable = true;
+    ImGui::End();
+    return;
+  }
+
+  ImGui::InputFloat3("Poisition", glm::value_ptr(data.pos));
+  ImGui::InputFloat3("Rotate", glm::value_ptr(data.rotate));
+  ImGui::InputFloat3("Scale", glm::value_ptr(data.scale));
 
   if (entity->type == SHAPE) {
     ImGui::Text("Textures");
@@ -130,7 +236,7 @@ void Entities::entityWidget() {
     auto texturesInfos = textures->getTextures();
     for (auto &it : texturesInfos) {
       if (ImGui::ImageButton(it.name.c_str(), it.diffuse->getIndex(), size)) {
-        std::cout << it.name << std::endl;
+        data.tm = &it;
       }
       ImGui::SameLine();
     }

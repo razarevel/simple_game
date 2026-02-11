@@ -16,13 +16,12 @@ struct ShapeModule {
 struct ShapeVertex {
   glm::vec3 pos;
   glm::vec2 uv;
+  glm::vec3 norms;
 };
 
 struct Shapes {
   Shapes(MAI::Renderer *ren, VkFormat format);
   ~Shapes();
-
-  void drawShapes(MAI::CommandBuffer *buff, glm::mat4 proj, glm::mat4 view);
 
   std::vector<std::string> getShapesInfo() {
     std::vector<std::string> shapesInfo;
@@ -40,7 +39,6 @@ struct Shapes {
 
 private:
   MAI::Renderer *ren_;
-  MAI::Pipeline *pipeline_;
 
   uint32_t shapeCount = 0;
 

@@ -51,6 +51,7 @@ void MaiApp::setMouseConfig() {
       });
 }
 
+bool undoMods[2];
 void MaiApp::setKeyboardConfig() {
   glfwSetKeyCallback(window, [](GLFWwindow *window, int key, int scancode,
                                 int action, int mods) {
@@ -76,7 +77,19 @@ void MaiApp::setKeyboardConfig() {
                         glm::vec3(0.0f, 1.0f, 0.0f));
       positioner.setSpeed(glm::vec3(0));
     }
+
+    if (key == GLFW_KEY_Z && pressed && mods & GLFW_MOD_CONTROL)
+      undoMods[0] = true;
+    if (key == GLFW_KEY_Y && pressed && mods & GLFW_MOD_CONTROL)
+      undoMods[1] = true;
   });
+}
+
+std::array<bool, 2> MaiApp::getMods() {
+  std::array<bool, 2> mods;
+  mods[0] = undoMods[0];
+  mods[1] = undoMods[1];
+  return mods;
 }
 
 void MaiApp::run(DrawFrameFunc drawFrame, DrawFrameFunc beforeDraw,
@@ -135,6 +148,8 @@ void MaiApp::run(DrawFrameFunc drawFrame, DrawFrameFunc beforeDraw,
     ren->submit();
     afterDraw(buff, width, height, ratio, deltaSecond);
     delete buff;
+    undoMods[0] = false;
+    undoMods[1] = false;
   }
   ren->waitDeviceIdle();
 }

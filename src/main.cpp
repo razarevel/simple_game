@@ -16,7 +16,7 @@ int main() {
 
   Skybox *skybox = new Skybox(mai->ren, format);
 
-  Entities *entities = new Entities(mai->ren, format);
+  Entities *entities = new Entities(mai->ren, mai->window, format);
 
   int currentAssets = 0;
 
@@ -33,6 +33,7 @@ int main() {
         .view = view,
         .cameraPos = cameraPos,
     });
+
     {
       buff->cmdBindDepthState({
           .depthWriteEnable = true,
@@ -41,7 +42,6 @@ int main() {
       entities->draw(buff, p, view, cameraPos);
     }
 
-    buff->cmdBindDepthState({});
     // imgui
     if (const ImGuiViewport *v = ImGui::GetMainViewport()) {
       ImGui::SetNextWindowPos({v->WorkPos.x, v->WorkPos.y}, ImGuiCond_Always,
