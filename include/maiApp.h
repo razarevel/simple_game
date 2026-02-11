@@ -47,5 +47,5 @@ struct MaiApp {
 
 private:
   void setMouseConfig();
-  void setKeyboardConfig();
+  void updateMouseMovement();
 };

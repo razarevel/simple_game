@@ -1,19 +1,21 @@
 #include "maiApp.h"
 #include "imgui.h"
 
-const glm::vec3 KInitialCameraPos = glm::vec3(0.0f, 1.0f, -1.5f);
-const glm::vec3 kInitialCameraTarget = glm::vec3(0.0f, 0.5f, 0.0f);
-
-CameraPositioner_FirstPerson positioner(KInitialCameraPos, kInitialCameraTarget,
-                                        glm::vec3(0.0f, 1.0f, 0.0f));
-
 struct MouseState {
   glm::vec2 pos = glm::vec2(0.0f);
   bool presedLeft = false;
 } mouseState;
 
+void setKeyboardConfig(GLFWwindow *window, int key, int scancode, int action,
+                       int mods);
+
+float deltaSecond = 0.0f;
+bool firstMouse = true;
+float lastX = 0.0f;
+float lastY = 0.0f;
+
 MaiApp::MaiApp() {
-  camera = new Camera(positioner);
+  camera = new Camera(glm::vec3(0.0f, 0.0f, 3.0f));
   windowInfo = {
       .width = 1200,
       .height = 800,
@@ -30,7 +32,10 @@ MaiApp::MaiApp() {
   });
 
   setMouseConfig();
-  setKeyboardConfig();
+
+  glfwSetKeyCallback(window, setKeyboardConfig);
+
+  glfwSetWindowUserPointer(window, this);
 
   imgui = new ImGuiRenderer(ren, window, depthTexture->getDeptFormat());
 }
@@ -52,37 +57,27 @@ void MaiApp::setMouseConfig() {
 }
 
 bool undoMods[2];
-void MaiApp::setKeyboardConfig() {
-  glfwSetKeyCallback(window, [](GLFWwindow *window, int key, int scancode,
-                                int action, int mods) {
-    const bool pressed = action != GLFW_RELEASE;
-    if (key == GLFW_KEY_ESCAPE && pressed)
-      glfwSetWindowShouldClose(window, GLFW_TRUE);
-    if (key == GLFW_KEY_W)
-      positioner.movement_.forward_ = pressed;
-    if (key == GLFW_KEY_S)
-      positioner.movement_.backward_ = pressed;
-    if (key == GLFW_KEY_A)
-      positioner.movement_.left_ = pressed;
-    if (key == GLFW_KEY_D)
-      positioner.movement_.right_ = pressed;
-    if (key == GLFW_KEY_1)
-      positioner.movement_.up_ = pressed;
-    if (key == GLFW_KEY_2)
-      positioner.movement_.down_ = pressed;
-    if (mods & GLFW_MOD_SHIFT)
-      positioner.movement_.fastSpeed_ = pressed;
-    if (key == GLFW_KEY_SPACE) {
-      positioner.lookAt(KInitialCameraPos, kInitialCameraTarget,
-                        glm::vec3(0.0f, 1.0f, 0.0f));
-      positioner.setSpeed(glm::vec3(0));
-    }
+void setKeyboardConfig(GLFWwindow *window, int key, int scancode, int action,
+                       int mods) {
+  MaiApp *mai = reinterpret_cast<MaiApp *>(glfwGetWindowUserPointer(window));
 
-    if (key == GLFW_KEY_Z && pressed && mods & GLFW_MOD_CONTROL)
-      undoMods[0] = true;
-    if (key == GLFW_KEY_Y && pressed && mods & GLFW_MOD_CONTROL)
-      undoMods[1] = true;
-  });
+  const bool pressed = action != GLFW_RELEASE;
+  if (key == GLFW_KEY_ESCAPE && pressed)
+    glfwSetWindowShouldClose(window, GLFW_TRUE);
+
+  if (key == GLFW_KEY_W)
+    mai->camera->ProcessKeyboard(FORWARD, deltaSecond);
+  if (key == GLFW_KEY_S)
+    mai->camera->ProcessKeyboard(BACKWARD, deltaSecond);
+  if (key == GLFW_KEY_A)
+    mai->camera->ProcessKeyboard(LEFT, deltaSecond);
+  if (key == GLFW_KEY_D)
+    mai->camera->ProcessKeyboard(RIGHT, deltaSecond);
+
+  if (key == GLFW_KEY_Z && pressed && mods & GLFW_MOD_CONTROL)
+    undoMods[0] = true;
+  if (key == GLFW_KEY_Y && pressed && mods & GLFW_MOD_CONTROL)
+    undoMods[1] = true;
 }
 
 std::array<bool, 2> MaiApp::getMods() {
@@ -92,9 +87,29 @@ std::array<bool, 2> MaiApp::getMods() {
   return mods;
 }
 
+void MaiApp::updateMouseMovement() {
+  if (ImGui::GetIO().WantCaptureMouse ? false : mouseState.presedLeft) {
+    float xpos = static_cast<float>(mouseState.pos.x);
+    float ypos = static_cast<float>(mouseState.pos.x);
+
+    if (firstMouse) {
+      lastX = xpos;
+      lastY = ypos;
+      firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos;
+
+    lastX = xpos;
+    lastY = ypos;
+
+    camera->ProcessMouseMovement(mouseState.pos.x, mouseState.pos.y);
+  }
+}
+
 void MaiApp::run(DrawFrameFunc drawFrame, DrawFrameFunc beforeDraw,
                  DrawFrameFunc afterDraw) {
-  float deltaSecond = 0.0f;
   double timeStamp = glfwGetTime();
   FPS fps;
 
@@ -109,9 +124,8 @@ void MaiApp::run(DrawFrameFunc drawFrame, DrawFrameFunc beforeDraw,
     deltaSecond = static_cast<float>(newTimeStamp - timeStamp);
     timeStamp = newTimeStamp;
 
-    positioner.update(deltaSecond, mouseState.pos,
-                      ImGui::GetIO().WantCaptureMouse ? false
-                                                      : mouseState.presedLeft);
+    updateMouseMovement();
+
     fps.tick(deltaSecond);
     currentFPS = fps.currentFPS_;
 

@@ -20,12 +20,15 @@ int main() {
 
   int currentAssets = 0;
 
+  glm::vec3 cameraPos(0.0f, 1.0f, -1.5f);
+  glm::vec3 cameraTarget(0.0f, 0.0f, 0.0f);
+
   auto draw = [&](MAI::CommandBuffer *buff, uint32_t width, uint32_t height,
                   float ratio, float deltaSecond) {
     glm::mat4 p = glm::perspective(glm::radians(60.0f), ratio, 0.1f, 1000.0f);
     p[1][1] *= -1;
-    glm::mat4 view = mai->camera->getViewMatrix();
-    glm::vec3 cameraPos = mai->camera->getPosition();
+    glm::mat4 view = mai->camera->GetViewMatrix();
+
     skybox->draw({
         .buff = buff,
         .ratio = ratio,
@@ -53,6 +56,8 @@ int main() {
     ImGui::Begin("Viewport");
     skybox->guiWidgets();
     entities->guiWidget();
+
+    ImGui::InputFloat3("Camera", glm::value_ptr(cameraPos));
     ImGui::End();
 
     entities->entityWidget();
