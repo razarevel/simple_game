@@ -1,8 +1,8 @@
 #pragma once
 
+#include "imgui.h"
 #include <glm/ext.hpp>
 #include <glm/glm.hpp>
-#include <iostream>
 
 enum CameraMovement {
   FORWARD,
@@ -13,8 +13,8 @@ enum CameraMovement {
 
 const float YAW = -90.0f;
 const float PITCH = 0.0f;
-const float SPEED = 2.5f;
-const float SENSITIVITY = 0.1f;
+const float SPEED = 5.5f;
+const float SENSITIVITY = 100.1f;
 const float ZOOM = 45.0f;
 
 struct Camera {
@@ -60,12 +60,11 @@ struct Camera {
 
   void ProcessMouseMovement(float xoffset, float yoffset,
                             bool constraintPitch = true) {
-    std::cout << xoffset << ", " << yoffset << std::endl;
     xoffset *= MouseSensitivit;
     yoffset *= MouseSensitivit;
 
     Yaw += xoffset;
-    Pitch += yoffset;
+    Pitch -= yoffset;
 
     if (constraintPitch) {
       if (Pitch > 80.0f)
@@ -85,12 +84,22 @@ struct Camera {
       Zoom = 45.0f;
   }
 
+  void camerGui() {
+    if (ImGui::TreeNode("Camera")) {
+      ImGui::InputFloat("Camera Speed", &MovementSpeed);
+      ImGui::InputFloat("Sensitivity", &MouseSensitivit);
+      ImGui::TreePop();
+    }
+    ImGui::NewLine();
+  }
+
 private:
   void updateCameraView() {
     glm::vec3 front;
     front.x = cos(glm::radians(Yaw)) * cos(glm::radians(Pitch));
     front.y = sin(glm::radians(Pitch));
     front.z = sin(glm::radians(Yaw)) * cos(glm::radians(Pitch));
+    Front = glm::normalize(front);
 
     Right = glm::normalize(glm::cross(Front, WorldUp));
     Up = glm::normalize(glm::cross(Right, Front));

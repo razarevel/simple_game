@@ -54,6 +54,7 @@ int main() {
       ImGui::SetNextWindowBgAlpha(0.50f);
     }
     ImGui::Begin("Viewport");
+    mai->camera->camerGui();
     skybox->guiWidgets();
     entities->guiWidget();
 
