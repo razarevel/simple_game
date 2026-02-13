@@ -1,9 +1,21 @@
 #include "entities.h"
-#include "imgui.h"
+#include "json.hpp"
 #include "maiApp.h"
+#include <cstdio>
+#include <fstream>
 #include <glm/ext.hpp>
 #include <iostream>
+#include <string>
 #include <thread>
+
+using json = nlohmann::json;
+
+std::string entityCacheStr =
+    "entiyId = %d, addId = %d, type = %s, textureId = %d, tiling = "
+    "%f, pos = [%f, %f, %f], "
+    "scale = [%f, %f, %f], rotate = [%f, %f, %f]";
+
+std::string entityCacheFile = RESOURCES_PATH "entity.json";
 
 Entities::Entities(MAI::Renderer *ren, GLFWwindow *window, VkFormat formt)
     : ren_(ren), window(window), format(formt) {
@@ -13,7 +25,9 @@ Entities::Entities(MAI::Renderer *ren, GLFWwindow *window, VkFormat formt)
   t2.join();
   t1.join();
   t3.join();
+
   preparePipelines();
+  loadEntity();
 }
 
 void Entities::preparePipelines() {
@@ -27,10 +41,23 @@ void Entities::preparePipelines() {
   });
   delete vert;
   delete frag;
+
+  vert = ren_->createShader(SHADERS_PATH "spvs/shap.vspv");
+  frag = ren_->createShader(SHADERS_PATH "spvs/shap.fspv");
+  ShapePipeline_ = ren_->createPipeline({
+      .vert = vert,
+      .frag = frag,
+      .depthFormat = format,
+      .cullMode = MAI::CullMode::Back,
+  });
+  delete vert;
+  delete frag;
 }
 
-void Entities::draw(MAI::CommandBuffer *buff, glm::mat4 proj, glm::mat4 view,
-                    glm::vec3 cameraPos) {
+void Entities::draw(EntityDrawInfo info) {
+
+  drawInfo_ = info;
+  MAI::CommandBuffer *buff = info.buff;
   for (auto &entity : entities) {
     EntityData &data = entity.entityData;
     if (data.disable)
@@ -40,26 +67,31 @@ void Entities::draw(MAI::CommandBuffer *buff, glm::mat4 proj, glm::mat4 view,
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, data.pos);
     model = glm::scale(model, data.scale);
+    // model = glm::toMat4(glm::quat(data.rotate));
 
     // draw
-    buff->bindPipeline(pipeline_);
     if (entity.type == ASSET) {
-      Model *md = assets->getModel(entity.name);
-      md->draw(buff, proj, view, model);
+      buff->bindPipeline(pipeline_);
+      Model *md = assets->getModel(entity.addId);
+      md->draw(buff, info.proj, info.view, model);
 
     } else if (entity.type == SHAPE) {
-      ShapeModule *sm = shapes->getShapeModule(entity.name);
+      buff->bindPipeline(ShapePipeline_);
+      ShapeModule *sm = shapes->getShapeModule(entity.addId);
+      TextureModel *tm = textures->getTextureModel(entity.entityData.textureId);
       struct PushConstant {
         glm::mat4 proj;
         glm::mat4 view;
         glm::mat4 model;
+        float tiling;
         uint32_t tex;
         uint64_t vertx;
       } pc{
-          .proj = proj,
-          .view = view,
+          .proj = info.proj,
+          .view = info.view,
           .model = model,
-          .tex = data.tm != nullptr ? data.tm->diffuse->getIndex() : 0,
+          .tiling = data.tiling,
+          .tex = tm != nullptr ? tm->diffuse->getIndex() : 0,
           .vertx = ren_->gpuAddress(sm->vertBuff),
       };
 
@@ -69,6 +101,28 @@ void Entities::draw(MAI::CommandBuffer *buff, glm::mat4 proj, glm::mat4 view,
     }
   }
   undoCheck();
+}
+
+void Entities::checkMouseClick() {
+  MouseState state = drawInfo_.mouse_state;
+  if (!state.pressedLeft)
+    return;
+
+  int width, height;
+  glfwGetFramebufferSize(window, &width, &height);
+
+  float x = (2.0f * state.pos.x) / width;
+  float y = 1.0f - (2.0f * state.pos.y) / height;
+  float z = 1.0f;
+
+  // NDC -> view space
+  glm::vec4 rayClip = glm::vec4(x, y, -1.0f, 1.0f);
+  glm::vec4 rayEye = glm::inverse(drawInfo_.proj) * rayClip;
+  rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);
+
+  // View space -> world space
+  glm::vec3 rayWorld =
+      glm::normalize(glm::vec3(glm::inverse(drawInfo_.view) * rayEye));
 }
 
 void Entities::undoCheck() {
@@ -120,16 +174,84 @@ void Entities::undoCheck() {
         break;
       }
     }
-
-    // if (action.type == ENTITY) {
-    // } else if (action.type == ADD) {
-    //   for (auto &it : entities)
-    //     if (it.id == action.id) {
-    //       it.entityData.disable = false;
-    //       break;
-    //     }
-    // }
   }
+}
+
+void Entities::saveEntity() {
+  if (entities.empty())
+    return;
+
+  std::ofstream outfile(entityCacheFile.c_str());
+  if (outfile.is_open()) {
+    for (auto &entity : entities)
+      if (!entity.entityData.disable) {
+
+        std::string type;
+        if (entity.type == ASSET)
+          type = "ASSET";
+        else if (entity.type == SHAPE)
+          type = "SHAPE";
+
+        float pos[3] = {entity.entityData.pos.x, entity.entityData.pos.y,
+                        entity.entityData.pos.z};
+
+        float scale[3] = {entity.entityData.scale.x, entity.entityData.scale.y,
+                          entity.entityData.scale.z};
+        float roate[3] = {entity.entityData.rotate.x,
+                          entity.entityData.rotate.y,
+                          entity.entityData.rotate.z};
+
+        json j;
+        j["entiyId"] = entity.id;
+        j["addId"] = entity.addId;
+        j["type"] = type;
+        j["textureId"] = entity.entityData.textureId;
+        j["tiling"] = entity.entityData.tiling;
+        j["pos"] = pos;
+        j["rotate"] = roate;
+        j["scale"] = scale;
+
+        outfile << j << std::endl;
+      }
+  }
+  outfile.close();
+  std::cout << "saved" << std::endl;
+}
+
+void Entities::resetEntity() {
+  entities.clear();
+  actions.clear();
+}
+
+void Entities::loadEntity() {
+  std::ifstream file(entityCacheFile);
+  if (!file.is_open())
+    return;
+
+  std::string line;
+  while (std::getline(file, line)) {
+    Entity entity;
+    json j = json::parse(line);
+    entity.id = j["entiyId"].get<uint32_t>();
+    entity.addId = j["addId"].get<uint32_t>();
+    std::string type = j["type"].get<std::string>();
+    entity.entityData.textureId = j["textureId"].get<uint32_t>();
+    entity.entityData.tiling = j["tiling"].get<float>();
+    auto pos = j["pos"];
+    auto rotate = j["rotate"];
+    auto scale = j["scale"];
+
+    if (type == "ASSET")
+      entity.type = ASSET;
+    else if (type == "SHAPE")
+      entity.type = SHAPE;
+
+    entity.entityData.pos = glm::vec3(pos[0], pos[1], pos[2]);
+    entity.entityData.scale = glm::vec3(scale[0], scale[1], scale[2]);
+    entity.entityData.rotate = glm::vec3(rotate[0], rotate[1], rotate[2]);
+    entities.emplace_back(entity);
+  }
+  file.close();
 }
 
 void Entities::actionAdd(uint32_t id, ActionType type, EntityData data) {
@@ -162,7 +284,7 @@ void Entities::guiWidget() {
       actionAdd(currentEntity);
       entities.emplace_back(Entity{
           .id = currentEntity,
-          .name = it.name,
+          .addId = it.id,
           .type = ASSET,
       });
     }
@@ -172,12 +294,12 @@ void Entities::guiWidget() {
   auto shapesInfo = shapes->getShapesInfo();
   if (ImGui::TreeNodeEx("Shapes", ImGuiTreeNodeFlags_DefaultOpen)) {
     for (auto &it : shapesInfo)
-      if (ImGui::Button(it.c_str(), ImVec2(50, 50))) {
+      if (ImGui::Button(it.name.c_str(), ImVec2(50, 50))) {
         currentEntity++;
         actionAdd(currentEntity);
         entities.emplace_back(Entity{
             .id = currentEntity,
-            .name = it,
+            .addId = it.id,
             .type = SHAPE,
         });
       }
@@ -189,7 +311,7 @@ void Entities::guiWidget() {
   for (auto &it : entities) {
     EntityData data = it.entityData;
     if (!data.disable) {
-      std::string name = it.name + " " + std::to_string(it.id);
+      std::string name = "Entity " + std::to_string(it.id);
       if (ImGui::Button(name.c_str()))
         currentEntity = (int)it.id;
     }
@@ -205,7 +327,7 @@ void Entities::entityWidget() {
     if (it.id == currentEntity)
       entity = &it;
 
-  EntityData &data = entity->entityData;
+  EntityData data = entity->entityData;
 
   if (data.disable)
     return;
@@ -217,18 +339,44 @@ void Entities::entityWidget() {
 
     ImGui::SetNextWindowSize({v->WorkSize.x * 0.3f, 0}, ImGuiCond_Always);
   }
-  ImGui::Begin(entity->name.c_str());
+
+  std::string name = "Entities " + std::to_string(entity->id);
+  ImGui::Begin(name.c_str());
 
   if (ImGui::Button("Del")) {
     actionAdd(entity->id, ENTITY, entity->entityData);
     data.disable = true;
     ImGui::End();
+    entity->entityData = data;
     return;
   }
 
-  ImGui::InputFloat3("Poisition", glm::value_ptr(data.pos));
-  ImGui::InputFloat3("Rotate", glm::value_ptr(data.rotate));
-  ImGui::InputFloat3("Scale", glm::value_ptr(data.scale));
+  auto inputFloat3WithCommit = [](const char *label, glm::vec3 &value) {
+    ImGui::InputFloat3(label, glm::value_ptr(value));
+    return ImGui::IsItemDeactivatedAfterEdit();
+  };
+
+  if (inputFloat3WithCommit("Position", data.pos)) {
+    actionAdd(entity->id, ENTITY, entity->entityData);
+    entity->entityData = data;
+  }
+
+  if (inputFloat3WithCommit("Rotate", data.rotate)) {
+    actionAdd(entity->id, ENTITY, entity->entityData);
+    entity->entityData = data;
+  }
+
+  if (inputFloat3WithCommit("Scale", data.scale)) {
+    actionAdd(entity->id, ENTITY, entity->entityData);
+    entity->entityData = data;
+  }
+
+  ImGui::NewLine();
+  ImGui::InputFloat("Tiling", &data.tiling);
+  if (ImGui::IsItemDeactivatedAfterEdit()) {
+    actionAdd(entity->id, ENTITY, entity->entityData);
+    entity->entityData = data;
+  }
 
   if (entity->type == SHAPE) {
     ImGui::Text("Textures");
@@ -236,7 +384,9 @@ void Entities::entityWidget() {
     auto texturesInfos = textures->getTextures();
     for (auto &it : texturesInfos) {
       if (ImGui::ImageButton(it.name.c_str(), it.diffuse->getIndex(), size)) {
-        data.tm = &it;
+        actionAdd(entity->id, ENTITY, entity->entityData);
+        data.textureId = it.id;
+        entity->entityData = data;
       }
       ImGui::SameLine();
     }
@@ -249,5 +399,6 @@ Entities::~Entities() {
   delete assets;
   delete textures;
   delete pipeline_;
+  delete ShapePipeline_;
   delete shapes;
 }

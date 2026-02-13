@@ -6,6 +6,7 @@
 #include <assimp/cimport.h>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
+#include <iostream>
 
 #include "stbi_image.h"
 #include "textures.h"
@@ -27,14 +28,15 @@ int main() {
                   float ratio, float deltaSecond) {
     glm::mat4 p = glm::perspective(glm::radians(60.0f), ratio, 0.1f, 1000.0f);
     p[1][1] *= -1;
-    glm::mat4 view = mai->camera->GetViewMatrix();
+
+    const glm::mat4 view = mai->camera->GetViewMatrix();
 
     skybox->draw({
         .buff = buff,
         .ratio = ratio,
         .proj = p,
         .view = view,
-        .cameraPos = cameraPos,
+        .cameraPos = mai->camera->Position,
     });
 
     {
@@ -42,7 +44,13 @@ int main() {
           .depthWriteEnable = true,
           .compareOp = MAI::CompareOp::Less,
       });
-      entities->draw(buff, p, view, cameraPos);
+      entities->draw({
+          .buff = buff,
+          .proj = p,
+          .view = view,
+          .cameraPos = cameraPos,
+          .mouse_state = mai->mouse_state,
+      });
     }
 
     // imgui
@@ -54,11 +62,19 @@ int main() {
       ImGui::SetNextWindowBgAlpha(0.50f);
     }
     ImGui::Begin("Viewport");
+    if (ImGui::Button("Save")) {
+      entities->saveEntity();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reset")) {
+      entities->resetEntity();
+    }
+
+    ImGui::NewLine();
+
     mai->camera->camerGui();
     skybox->guiWidgets();
     entities->guiWidget();
-
-    ImGui::InputFloat3("Camera", glm::value_ptr(cameraPos));
     ImGui::End();
 
     entities->entityWidget();

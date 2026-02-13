@@ -71,6 +71,8 @@ Skybox::Skybox(MAI::Renderer *ren, VkFormat format) : ren_(ren) {
 
 void Skybox::draw(const DrawInfo &info) {
 
+  glm::mat4 proj = info.proj;
+
   struct PushConstant {
     glm::mat4 view;
     glm::mat4 proj;
@@ -78,7 +80,7 @@ void Skybox::draw(const DrawInfo &info) {
     uint32_t textureId;
   } pc{
       .view = info.view,
-      .proj = info.proj,
+      .proj = proj,
       .cameraPos = glm::vec4(info.cameraPos, 1.0f),
       .textureId = cubemaps[currSkybox.back()].tex->getIndex(),
   };

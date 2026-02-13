@@ -17,10 +17,10 @@ struct Assets {
 
   std::vector<ModelInfo> getModelInfos();
 
-  Model *getModel(std::string name) {
+  Model *getModel(uint32_t id) {
     Model *model = nullptr;
     for (auto &it : models)
-      if (it->name == name)
+      if (it->id == id)
         return it;
     assert(false);
   }

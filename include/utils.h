@@ -1,4 +1,9 @@
 #pragma once
 #include <vector>
 
-std::vector<uint32_t> shapesToDraw;
+#include <glm/glm.hpp>
+
+struct MouseState {
+  glm::vec2 pos;
+  bool pressedLeft;
+};

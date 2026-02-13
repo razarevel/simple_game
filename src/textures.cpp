@@ -10,7 +10,7 @@
 namespace fs = std::filesystem;
 
 namespace {
-uint32_t count = 0;
+uint32_t count = 1;
 std::mutex mtx;
 }; // namespace
    //

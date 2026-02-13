@@ -1,0 +1,1 @@
+entiyId = id, textureId = id, tiling = 0.1f, pos = [0.0f, 0.0f, 0.0f], scale = [0.0f, 0.0f, 0.0f], rotate = [0.0f, 0.0f, 0.0f]\n

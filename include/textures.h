@@ -1,6 +1,7 @@
 #pragma once
 #include "mai_config.h"
 #include "mai_vk.h"
+#include <cassert>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,12 @@ struct Textures {
   Textures(MAI::Renderer *ren);
   ~Textures();
   std::vector<TextureModel> &getTextures() { return textures; }
+  TextureModel *getTextureModel(uint32_t id) {
+    for (auto &tm : textures)
+      if (tm.id == id)
+        return &tm;
+    return nullptr;
+  };
 
 private:
   MAI::Renderer *ren_;

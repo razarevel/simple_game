@@ -1,10 +1,7 @@
 #include "maiApp.h"
 #include "imgui.h"
 
-struct MouseState {
-  glm::vec2 pos = glm::vec2(0.0f);
-  bool presedLeft = false;
-} mouseState;
+MouseState mouseState;
 
 void setKeyboardConfig(GLFWwindow *window, int key, int scancode, int action,
                        int mods);
@@ -20,7 +17,7 @@ MaiApp::MaiApp() {
   windowInfo = {
       .width = 1200,
       .height = 800,
-      .appName = "Demo Game",
+      .appName = "SandBox",
   };
   window = MAI::initWindow(windowInfo);
   ren = MAI::initVulkanWithSwapChain(window, windowInfo.appName);
@@ -52,7 +49,7 @@ void MaiApp::setMouseConfig() {
   glfwSetMouseButtonCallback(
       window, [](auto *window, int button, int action, int mods) {
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
-          mouseState.presedLeft = action == GLFW_PRESS;
+          mouseState.pressedLeft = action == GLFW_PRESS;
         }
       });
 }
@@ -62,7 +59,7 @@ void setKeyboardConfig(GLFWwindow *window, int key, int scancode, int action,
                        int mods) {
 
   const bool pressed = action != GLFW_RELEASE;
-  if (key == GLFW_KEY_ESCAPE && pressed)
+  if (key == GLFW_KEY_F4 && pressed && mods & GLFW_MOD_ALT)
     glfwSetWindowShouldClose(window, GLFW_TRUE);
 
   if (key == GLFW_KEY_Z && pressed && mods & GLFW_MOD_CONTROL)
@@ -94,7 +91,8 @@ std::array<bool, 2> MaiApp::getMods() {
 void MaiApp::updateMouseMovement() {
   if (ImGui::GetIO().WantCaptureMouse)
     return;
-  if (mouseState.presedLeft) {
+
+  if (mouseState.pressedLeft) {
     float xpos = static_cast<float>(mouseState.pos.x);
     float ypos = static_cast<float>(mouseState.pos.y);
 
@@ -110,7 +108,7 @@ void MaiApp::updateMouseMovement() {
     lastX = xpos;
     lastY = ypos;
 
-    camera->ProcessMouseMovement(xoffset, yoffset, false);
+    camera->ProcessMouseMovement(xoffset, yoffset);
   } else
     firstMouse = true;
 }
@@ -132,6 +130,7 @@ void MaiApp::run(DrawFrameFunc drawFrame, DrawFrameFunc beforeDraw,
     timeStamp = newTimeStamp;
 
     processInput(window);
+    mouse_state = mouseState;
     updateMouseMovement();
 
     fps.tick(deltaSecond);

@@ -1,42 +1,43 @@
 #include "shapes.h"
 #include <imgui.h>
 
-std::vector<ShapeVertex> cubeVertices = {
-    // Front (+Z)
-    {{-0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-    {{0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-    {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},
+std::vector<glm::vec4> cubeVertices = {
 
-    // Back (-Z)
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}},
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {0.0f, 0.0f, -1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, -1.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}},
+    // Front (+Z) → 0
+    {-0.5f, -0.5f, 0.5f, 0.0f},
+    {0.5f, -0.5f, 0.5f, 0.0f},
+    {0.5f, 0.5f, 0.5f, 0.0f},
+    {-0.5f, 0.5f, 0.5f, 0.0f},
 
-    // Left (-X)
-    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}},
-    {{-0.5f, -0.5f, 0.5f}, {1.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}},
-    {{-0.5f, 0.5f, 0.5f}, {1.0f, 1.0f}, {-1.0f, 0.0f, 0.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, {-1.0f, 0.0f, 0.0f}},
+    // Back (-Z) → 1
+    {0.5f, -0.5f, -0.5f, 1.0f},
+    {-0.5f, -0.5f, -0.5f, 1.0f},
+    {-0.5f, 0.5f, -0.5f, 1.0f},
+    {0.5f, 0.5f, -0.5f, 1.0f},
 
-    // Right (+X)
-    {{0.5f, -0.5f, 0.5f}, {0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}},
+    // Left (-X) → 2
+    {-0.5f, -0.5f, -0.5f, 2.0f},
+    {-0.5f, -0.5f, 0.5f, 2.0f},
+    {-0.5f, 0.5f, 0.5f, 2.0f},
+    {-0.5f, 0.5f, -0.5f, 2.0f},
 
-    // Top (+Y)
-    {{-0.5f, 0.5f, 0.5f}, {0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.5f}, {1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}},
+    // Right (+X) → 3
+    {0.5f, -0.5f, 0.5f, 3.0f},
+    {0.5f, -0.5f, -0.5f, 3.0f},
+    {0.5f, 0.5f, -0.5f, 3.0f},
+    {0.5f, 0.5f, 0.5f, 3.0f},
 
-    // Bottom (-Y)
-    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.5f}, {1.0f, 1.0f}, {0.0f, -1.0f, 0.0f}},
-    {{-0.5f, -0.5f, 0.5f}, {0.0f, 1.0f}, {0.0f, -1.0f, 0.0f}},
+    // Top (+Y) → 4
+    {-0.5f, 0.5f, 0.5f, 4.0f},
+    {0.5f, 0.5f, 0.5f, 4.0f},
+    {0.5f, 0.5f, -0.5f, 4.0f},
+    {-0.5f, 0.5f, -0.5f, 4.0f},
+
+    // Bottom (-Y) → 5
+    {-0.5f, -0.5f, -0.5f, 5.0f},
+    {0.5f, -0.5f, -0.5f, 5.0f},
+    {0.5f, -0.5f, 0.5f, 5.0f},
+    {-0.5f, -0.5f, 0.5f, 5.0f},
 };
 
 std::vector<uint16_t> cubeIndices = {
@@ -48,34 +49,42 @@ std::vector<uint16_t> cubeIndices = {
     20, 21, 22, 22, 23, 20  // Bottom
 };
 
-ShapeModule Shapes::prepareShape(const std::vector<ShapeVertex> &vertices,
-                                 const std::vector<uint16_t> &indices) {
-  ShapeModule cube = ShapeModule{
-      .vertBuff = ren_->createBuffer({
-          .usage = MAI::StorageBuffer,
-          .storage = MAI::StorageType_Device,
-          .size = sizeof(ShapeVertex) * cubeVertices.size(),
-          .data = cubeVertices.data(),
-      }),
-      .indexBuff = ren_->createBuffer({
-          .usage = MAI::IndexBuffer,
-          .storage = MAI::StorageType_Device,
-          .size = sizeof(uint16_t) * cubeIndices.size(),
-          .data = cubeIndices.data(),
-      }),
-      .indicesSize = (uint32_t)cubeIndices.size(),
-  };
-  return cube;
+ShapeModule Shapes::prepareShape(const std::vector<glm::vec4> &vertices,
+                                 const std::vector<uint16_t> &indices,
+                                 std::string name) {
+
+  ShapeModule shape;
+
+  shape.vertBuff = ren_->createBuffer({
+      .usage = MAI::StorageBuffer,
+      .storage = MAI::StorageType_Device,
+      .size = sizeof(glm::vec4) * cubeVertices.size(),
+      .data = cubeVertices.data(),
+  });
+
+  shape.indexBuff = ren_->createBuffer({
+      .usage = MAI::IndexBuffer,
+      .storage = MAI::StorageType_Device,
+      .size = sizeof(uint16_t) * cubeIndices.size(),
+      .data = cubeIndices.data(),
+  });
+  shape.indicesSize = (uint32_t)cubeIndices.size();
+
+  shape.name = name;
+  shape.id = shapeCount;
+
+  shapeCount++;
+  return shape;
 }
 
 Shapes::Shapes(MAI::Renderer *ren, VkFormat format) : ren_(ren) {
 
-  shapes.insert({"cube", prepareShape(cubeVertices, cubeIndices)});
+  shapes.emplace_back(prepareShape(cubeVertices, cubeIndices, "cube"));
 }
 
 Shapes::~Shapes() {
   for (auto &it : shapes) {
-    delete it.second.vertBuff;
-    delete it.second.indexBuff;
+    delete it.vertBuff;
+    delete it.indexBuff;
   }
 }

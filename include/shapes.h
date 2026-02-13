@@ -2,48 +2,39 @@
 
 #include "mai_config.h"
 #include "mai_vk.h"
-#include <map>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
 struct ShapeModule {
+  uint32_t id;
+  std::string name;
   MAI::Buffer *vertBuff = nullptr;
   MAI::Buffer *indexBuff = nullptr;
   uint32_t indicesSize;
-};
-
-struct ShapeVertex {
-  glm::vec3 pos;
-  glm::vec2 uv;
-  glm::vec3 norms;
 };
 
 struct Shapes {
   Shapes(MAI::Renderer *ren, VkFormat format);
   ~Shapes();
 
-  std::vector<std::string> getShapesInfo() {
-    std::vector<std::string> shapesInfo;
-    shapesInfo.reserve(shapes.size());
-    for (auto &it : shapes)
-      shapesInfo.emplace_back(it.first);
-    return shapesInfo;
-  }
+  const std::vector<ShapeModule> &getShapesInfo() const { return shapes; }
 
-  ShapeModule *getShapeModule(std::string name) {
-    auto it = shapes.find(name);
-    assert(it != shapes.end());
-    return &it->second;
+  ShapeModule *getShapeModule(uint32_t id) {
+    for (auto &sp : shapes) {
+      if (sp.id == id)
+        return &sp;
+    }
+    return nullptr;
   }
 
 private:
   MAI::Renderer *ren_;
-
   uint32_t shapeCount = 0;
+  std::vector<ShapeModule> shapes;
 
-  std::map<std::string, ShapeModule> shapes;
-
-  ShapeModule prepareShape(const std::vector<ShapeVertex> &vertices,
-                           const std::vector<uint16_t> &indices);
+  ShapeModule prepareShape(const std::vector<glm::vec4> &vertices,
+                           const std::vector<uint16_t> &indices,
+                           std::string name);
 };

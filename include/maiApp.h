@@ -3,6 +3,7 @@
 #include "imguiRenderer.h"
 #include "mai_config.h"
 #include "mai_vk.h"
+#include "utils.h"
 #include <array>
 #include <functional>
 
@@ -38,6 +39,7 @@ struct MaiApp {
   MAI::Texture *depthTexture = nullptr;
   Camera *camera = nullptr;
   ImGuiRenderer *imgui;
+  MouseState mouse_state;
   float currentFPS;
 
   void run(DrawFrameFunc drawFrame, DrawFrameFunc beforeDraw,
